@@ -48,7 +48,6 @@ top_stocks = {
     "HAPV3 - Hapvida": "HAPV3",
     "HYPE3 - Hypera Pharma": "HYPE3",
     "IGTI11 - Iguatemi": "IGTI11",
-    "IRBR3 - IRB Brasil": "IRBR3",
     "ITSA4 - Itaúsa": "ITSA4",
     "ITUB4 - Itaú Unibanco": "ITUB4",
     "JBSS3 - JBS": "JBSS3",
