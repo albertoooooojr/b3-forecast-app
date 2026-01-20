@@ -41,10 +41,8 @@ Siga os passos abaixo para rodar o projeto em sua máquina local.
 
 **1. Clone o repositório:**
 ```bash
-git clone https://github.com/SEU-USUARIO/NOME-DO-SEU-REPOSITORIO.git
-cd NOME-DO-SEU-REPOSITORIO
-```
-> *Substitua `SEU-USUARIO` e `NOME-DO-SEU-REPOSITORIO` pelos seus dados.*
+git clone https://github.com/albertoooooojr/b3-forecast-app.git
+cd b3-forecast-app
 
 **2. Crie um ambiente virtual (recomendado ):**
 ```bash
