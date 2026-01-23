@@ -18,6 +18,9 @@ st.markdown("<sub>📈 Previsão de Ações da B3 (Brasil)</sub>", unsafe_allow_
 top_stocks = {
     "ABEV3 - Ambev": "ABEV3",
     "ASAI3 - Assaí": "ASAI3",
+    "AXIA3 - Axia Energia (ON)": "AXIA3",
+    "AXIA5 - Axia Energia (PN A)": "AXIA5",
+    "AXIA6 - Axia Energia (PN B)": "AXIA6"
     "B3SA3 - B3": "B3SA3",
     "BBAS3 - Banco do Brasil": "BBAS3",
     "BBDC3 - Bradesco ON": "BBDC3",
@@ -26,8 +29,6 @@ top_stocks = {
     "BEEF3 - Minerva": "BEEF3",
     "BPAC11 - BTG Pactual": "BPAC11",
     "BRAP4 - Bradespar": "BRAP4",
-    "BRFS3 - BRF": "BRFS3",
-    "CCRO3 - CCR": "CCRO3",
     "CMIG4 - Cemig": "CMIG4",
     "CPFE3 - CPFL Energia": "CPFE3",
     "CPLE6 - Copel": "CPLE6",
@@ -42,7 +43,6 @@ top_stocks = {
     "ENGI11 - Energisa": "ENGI11",
     "EQTL3 - Equatorial": "EQTL3",
     "EVEN3 - Even Construtora": "EVEN3",
-    "EZTC3 - EZTEC": "EZTC3",
     "GGBR4 - Gerdau": "GGBR4",
     "GOAU4 - Metalúrgica Gerdau": "GOAU4",
     "HAPV3 - Hapvida": "HAPV3",
