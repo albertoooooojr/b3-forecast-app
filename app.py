@@ -20,7 +20,7 @@ top_stocks = {
     "ASAI3 - Assaí": "ASAI3",
     "AXIA3 - Axia Energia (ON)": "AXIA3",
     "AXIA5 - Axia Energia (PN A)": "AXIA5",
-    "AXIA6 - Axia Energia (PN B)": "AXIA6"
+    "AXIA6 - Axia Energia (PN B)": "AXIA6",
     "B3SA3 - B3": "B3SA3",
     "BBAS3 - Banco do Brasil": "BBAS3",
     "BBDC3 - Bradesco ON": "BBDC3",
