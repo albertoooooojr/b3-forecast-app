@@ -13,9 +13,9 @@ st.markdown("## 📈 B3 (Brazil) Stock Forecast")
 st.markdown("<sub>📈 Previsão de Ações da B3 (Brasil)</sub>", unsafe_allow_html=True)
 
 # ============================
-# All Stocks
+# Top Stocks
 # ============================
-all_stocks = {
+top_stocks = {
     "ABEV3 - Ambev": "ABEV3",
     "ASAI3 - Assaí": "ASAI3",
     "AXIA3 - Axia Energia (ON)": "AXIA3",
