@@ -3,6 +3,16 @@ import pandas as pd
 import yfinance as yf
 from prophet import Prophet
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib import rcParams
+import numpy as np
+
+# Configurar estilo dos gráficos
+rcParams['figure.facecolor'] = '#f8f9fa'
+rcParams['axes.facecolor'] = '#ffffff'
+rcParams['axes.edgecolor'] = '#e0e0e0'
+rcParams['grid.color'] = '#f0f0f0'
+rcParams['font.family'] = 'sans-serif'
 
 st.set_page_config(page_title="B3 Stock Forecast", layout="centered")
 
@@ -199,7 +209,6 @@ st.subheader("🔎 RSI Scanner - Overbought/oversold stocks")
 st.markdown("<sub>🔎 Scanner RSI - Ações Sobrecompradas/Sobrevendidas</sub>", unsafe_allow_html=True)
 
 results = []
-# AGORA PROCESSA TODOS OS ATIVOS (não apenas os primeiros 35)
 for name, code in top_stocks.items():
     try:
         df = yf.download(code + ".SA", period="6mo", interval="1d", progress=False)
@@ -234,18 +243,39 @@ if data.empty:
 else:
     data["RSI"] = calculate_rsi(data["Close"])
 
-    # RSI Plot
+    # RSI Plot - MELHORADO
     st.subheader(f"📉 RSI - {stock_choice}")
     st.markdown(f"<sub>📉 RSI - {stock_choice} (Relative Strength Index / Índice de Força Relativa)</sub>",
                 unsafe_allow_html=True)
 
-    fig_rsi, ax_rsi = plt.subplots()
-    ax_rsi.plot(data.index, data['RSI'], label='RSI', color='purple')
-    ax_rsi.axhline(70, color='red', linestyle='--', label='Overbought (70)')
-    ax_rsi.axhline(30, color='green', linestyle='--', label='Oversold (30)')
-    ax_rsi.set_title("RSI - Relative Strength Index")
-    ax_rsi.set_ylabel("RSI")
-    ax_rsi.legend()
+    fig_rsi, ax_rsi = plt.subplots(figsize=(14, 6))
+    
+    # Plotar RSI com estilo moderno
+    ax_rsi.plot(data.index, data['RSI'], label='RSI', color='#6366f1', linewidth=2.5, alpha=0.9)
+    
+    # Áreas de sobrecompra e sobrevenda
+    ax_rsi.fill_between(data.index, 70, 100, alpha=0.15, color='#ef4444', label='Overbought Zone')
+    ax_rsi.fill_between(data.index, 0, 30, alpha=0.15, color='#22c55e', label='Oversold Zone')
+    
+    # Linhas de referência com estilo melhorado
+    ax_rsi.axhline(70, color='#ef4444', linestyle='--', linewidth=1.5, alpha=0.7, label='Overbought (70)')
+    ax_rsi.axhline(30, color='#22c55e', linestyle='--', linewidth=1.5, alpha=0.7, label='Oversold (30)')
+    ax_rsi.axhline(50, color='#9ca3af', linestyle=':', linewidth=1, alpha=0.5)
+    
+    # Configurações de estilo
+    ax_rsi.set_title(f"RSI - {stock_choice}", fontsize=16, fontweight='bold', pad=20)
+    ax_rsi.set_ylabel("RSI", fontsize=12, fontweight='bold')
+    ax_rsi.set_xlabel("Date", fontsize=12, fontweight='bold')
+    ax_rsi.set_ylim(0, 100)
+    ax_rsi.grid(True, alpha=0.2, linestyle='--')
+    ax_rsi.legend(loc='upper left', framealpha=0.95, fontsize=10)
+    
+    # Formatar eixo X
+    ax_rsi.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    ax_rsi.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    plt.setp(ax_rsi.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    fig_rsi.patch.set_facecolor('#f8f9fa')
     plt.tight_layout()
     st.pyplot(fig_rsi)
 
@@ -255,7 +285,26 @@ else:
 
     st.subheader("📊 Historical Closing Price")
     st.markdown("<sub>📊 Preço de fechamento histórico</sub>", unsafe_allow_html=True)
-    st.line_chart(df_forecast.set_index('ds'))
+    
+    # Gráfico de preço histórico melhorado
+    fig_price, ax_price = plt.subplots(figsize=(14, 6))
+    ax_price.plot(data.index, data['Close'], label='Closing Price', color='#3b82f6', linewidth=2.5, alpha=0.9)
+    ax_price.fill_between(data.index, data['Close'], alpha=0.2, color='#3b82f6')
+    
+    ax_price.set_title(f"Historical Closing Price - {stock_choice}", fontsize=16, fontweight='bold', pad=20)
+    ax_price.set_ylabel("Price (R$)", fontsize=12, fontweight='bold')
+    ax_price.set_xlabel("Date", fontsize=12, fontweight='bold')
+    ax_price.grid(True, alpha=0.2, linestyle='--')
+    ax_price.legend(loc='upper left', framealpha=0.95, fontsize=10)
+    
+    # Formatar eixo X
+    ax_price.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    ax_price.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    plt.setp(ax_price.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    fig_price.patch.set_facecolor('#f8f9fa')
+    plt.tight_layout()
+    st.pyplot(fig_price)
 
     model = Prophet(daily_seasonality=True)
     model.fit(df_forecast)
@@ -266,12 +315,29 @@ else:
     st.subheader(f"🔮 Forecast for the next {future_days} days")
     st.markdown(f"<sub>🔮 Previsão para os próximos {future_days} dias</sub>", unsafe_allow_html=True)
 
-    fig1 = model.plot(forecast)
+    fig1 = model.plot(forecast, figsize=(14, 6))
+    fig1.patch.set_facecolor('#f8f9fa')
+    
+    # Melhorar cores do gráfico do Prophet
+    for ax in fig1.get_axes():
+        ax.set_facecolor('#ffffff')
+        ax.grid(True, alpha=0.2, linestyle='--')
+        ax.set_xlabel('Date', fontsize=11, fontweight='bold')
+        ax.set_ylabel('Price (R$)', fontsize=11, fontweight='bold')
+    
+    plt.tight_layout()
     st.pyplot(fig1)
 
     st.subheader("📉 Forecast Components")
     st.markdown("<sub>📉 Componentes da previsão</sub>", unsafe_allow_html=True)
 
-    fig2 = model.plot_components(forecast)
+    fig2 = model.plot_components(forecast, figsize=(14, 10))
+    fig2.patch.set_facecolor('#f8f9fa')
+    
+    # Melhorar cores dos componentes
+    for ax in fig2.get_axes():
+        ax.set_facecolor('#ffffff')
+        ax.grid(True, alpha=0.2, linestyle='--')
+    
+    plt.tight_layout()
     st.pyplot(fig2)
-
