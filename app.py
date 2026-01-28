@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-from prophet import Prophet
 import matplotlib.pyplot as plt
 import concurrent.futures
 from datetime import datetime
@@ -356,19 +355,19 @@ st.divider()
 # Select stock for detailed analysis
 # ============================
 st.subheader("📊 Análise Detalhada de Ativo")
-st.markdown("<sub>📊 Selecione um ativo para visualizar gráficos e previsões</sub>", unsafe_allow_html=True)
+st.markdown("<sub>📊 Selecione um ativo para visualizar gráficos e análise técnica</sub>", unsafe_allow_html=True)
 
 stock_choice = st.selectbox("📌 Escolha um ativo para análise:", list(all_stocks.keys()))
 ticker = all_stocks[stock_choice] + ".SA"
 
 col1, col2 = st.columns(2)
 with col1:
-    future_days = st.slider("Dias para previsão:", 7, 90, 30)
-with col2:
     rsi_window = st.slider("Período RSI:", 7, 28, 14)
+with col2:
+    days_back = st.slider("Dias para análise:", 90, 1000, 365)
 
 try:
-    data = yf.download(ticker, start="2020-01-01", progress=False)
+    data = yf.download(ticker, period=f"{days_back}d", progress=False)
     
     if data.empty or len(data) == 0:
         st.error("❌ Não foi possível buscar dados para este ativo.")
@@ -412,7 +411,7 @@ try:
 
         # Historical Closing Price
         st.subheader("📊 Preço de Fechamento Histórico")
-        st.markdown("<sub>Evolução do preço nos últimos anos</sub>", unsafe_allow_html=True)
+        st.markdown("<sub>Evolução do preço</sub>", unsafe_allow_html=True)
         
         fig_price, ax_price = plt.subplots(figsize=(14, 5))
         ax_price.plot(data.index, data['Close'], label='Preço de Fechamento', color='blue', linewidth=2)
@@ -425,45 +424,18 @@ try:
         plt.tight_layout()
         st.pyplot(fig_price)
 
-        # Prophet Forecast
-        st.subheader(f"🔮 Previsão para os próximos {future_days} dias")
-        st.markdown(f"<sub>Previsão utilizando Prophet (Meta)</sub>", unsafe_allow_html=True)
+        # Estatísticas
+        st.subheader("📈 Estatísticas do Ativo")
         
-        try:
-            df_forecast = data.reset_index()[['Date', 'Close']].copy()
-            df_forecast.columns = ['ds', 'y']
-            
-            model = Prophet(daily_seasonality=True, interval_width=0.95)
-            with st.spinner("Gerando previsão..."):
-                model.fit(df_forecast)
-            
-            future = model.make_future_dataframe(periods=future_days)
-            forecast = model.predict(future)
-            
-            fig1 = model.plot(forecast, figsize=(14, 6))
-            fig1.suptitle(f"Previsão - {stock_choice}", fontsize=14, fontweight='bold', y=1.00)
-            st.pyplot(fig1)
-            
-            # Forecast Components
-            st.subheader("📉 Componentes da Previsão")
-            st.markdown("<sub>Decomposição da série temporal</sub>", unsafe_allow_html=True)
-            
-            fig2 = model.plot_components(forecast, figsize=(14, 10))
-            st.pyplot(fig2)
-            
-            # Próximas previsões
-            st.subheader("📋 Próximas Previsões")
-            forecast_display = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(future_days).copy()
-            forecast_display.columns = ['Data', 'Previsão', 'Limite Inferior', 'Limite Superior']
-            forecast_display['Data'] = forecast_display['Data'].dt.strftime('%d/%m/%Y')
-            
-            st.dataframe(
-                forecast_display.reset_index(drop=True),
-                use_container_width=True,
-                hide_index=True
-            )
-        except Exception as e:
-            st.error(f"❌ Erro ao gerar previsão: {str(e)}")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Preço Mínimo (período)", f"R$ {data['Close'].min():.2f}")
+        with col2:
+            st.metric("Preço Máximo (período)", f"R$ {data['Close'].max():.2f}")
+        with col3:
+            st.metric("Preço Médio (período)", f"R$ {data['Close'].mean():.2f}")
+        with col4:
+            st.metric("Volatilidade", f"{data['Close'].pct_change().std() * 100:.2f}%")
 
 except Exception as e:
     st.error(f"❌ Erro ao buscar dados: {str(e)}")
