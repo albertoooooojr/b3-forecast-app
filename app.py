@@ -3,15 +3,6 @@ import pandas as pd
 import yfinance as yf
 from prophet import Prophet
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from matplotlib import rcParams
-
-# Configurar estilo dos gráficos
-rcParams['figure.facecolor'] = '#f8f9fa'
-rcParams['axes.facecolor'] = '#ffffff'
-rcParams['axes.edgecolor'] = '#e0e0e0'
-rcParams['grid.color'] = '#f0f0f0'
-rcParams['font.family'] = 'sans-serif'
 
 st.set_page_config(page_title="B3 Stock Forecast", layout="centered")
 
@@ -248,34 +239,13 @@ else:
     st.markdown(f"<sub>📉 RSI - {stock_choice} (Relative Strength Index / Índice de Força Relativa)</sub>",
                 unsafe_allow_html=True)
 
-    fig_rsi, ax_rsi = plt.subplots(figsize=(14, 6))
-    
-    # Plotar RSI com estilo moderno
-    ax_rsi.plot(data.index, data['RSI'], label='RSI', color='#6366f1', linewidth=2.5, alpha=0.9)
-    
-    # Áreas de sobrecompra e sobrevenda
-    ax_rsi.fill_between(data.index, 70, 100, alpha=0.15, color='#ef4444', label='Overbought Zone')
-    ax_rsi.fill_between(data.index, 0, 30, alpha=0.15, color='#22c55e', label='Oversold Zone')
-    
-    # Linhas de referência com estilo melhorado
-    ax_rsi.axhline(70, color='#ef4444', linestyle='--', linewidth=1.5, alpha=0.7, label='Overbought (70)')
-    ax_rsi.axhline(30, color='#22c55e', linestyle='--', linewidth=1.5, alpha=0.7, label='Oversold (30)')
-    ax_rsi.axhline(50, color='#9ca3af', linestyle=':', linewidth=1, alpha=0.5)
-    
-    # Configurações de estilo
-    ax_rsi.set_title(f"RSI - {stock_choice}", fontsize=16, fontweight='bold', pad=20)
-    ax_rsi.set_ylabel("RSI", fontsize=12, fontweight='bold')
-    ax_rsi.set_xlabel("Date", fontsize=12, fontweight='bold')
-    ax_rsi.set_ylim(0, 100)
-    ax_rsi.grid(True, alpha=0.2, linestyle='--')
-    ax_rsi.legend(loc='upper left', framealpha=0.95, fontsize=10)
-    
-    # Formatar eixo X
-    ax_rsi.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-    ax_rsi.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
-    plt.setp(ax_rsi.xaxis.get_majorticklabels(), rotation=45, ha='right')
-    
-    fig_rsi.patch.set_facecolor('#f8f9fa')
+    fig_rsi, ax_rsi = plt.subplots()
+    ax_rsi.plot(data.index, data['RSI'], label='RSI', color='purple')
+    ax_rsi.axhline(70, color='red', linestyle='--', label='Overbought (70)')
+    ax_rsi.axhline(30, color='green', linestyle='--', label='Oversold (30)')
+    ax_rsi.set_title("RSI - Relative Strength Index")
+    ax_rsi.set_ylabel("RSI")
+    ax_rsi.legend()
     plt.tight_layout()
     st.pyplot(fig_rsi)
 
