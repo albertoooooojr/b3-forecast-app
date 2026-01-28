@@ -289,7 +289,7 @@ else:
     # Gráfico de preço histórico melhorado
     fig_price, ax_price = plt.subplots(figsize=(14, 6))
     ax_price.plot(data.index, data['Close'], label='Closing Price', color='#3b82f6', linewidth=2.5, alpha=0.9)
-    ax_price.fill_between(data.index, data['Close'], alpha=0.2, color='#3b82f6')
+    ax_price.fill_between(data.index, data['Close'].min(), data['Close'], alpha=0.2, color='#3b82f6')
     
     ax_price.set_title(f"Historical Closing Price - {stock_choice}", fontsize=16, fontweight='bold', pad=20)
     ax_price.set_ylabel("Price (R$)", fontsize=12, fontweight='bold')
