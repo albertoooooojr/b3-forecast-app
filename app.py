@@ -5,7 +5,6 @@ from prophet import Prophet
 import matplotlib.pyplot as plt
 import concurrent.futures
 from datetime import datetime
-import time
 
 st.set_page_config(page_title="B3 Stock Forecast", layout="wide")
 
@@ -226,7 +225,7 @@ def fetch_rsi_data(name, code):
                 "Preço": round(last_price, 2),
                 "Status": status
             }
-    except Exception as e:
+    except:
         pass
     
     return None
@@ -260,8 +259,8 @@ if scan_button:
     
     results = []
     
-    # Usar processamento paralelo com mais workers para small caps
-    max_workers = 8 if show_small_caps else 5
+    # Usar processamento paralelo
+    max_workers = 8
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
@@ -276,14 +275,11 @@ if scan_button:
             completed += 1
             progress_bar.progress(min(completed / total, 0.99))
             
-            name, code = futures[future]
-            status_text.text(f"Processando: {completed}/{total} ativos... ({name})")
-            
             try:
                 result = future.result(timeout=10)
                 if result:
                     results.append(result)
-            except Exception as e:
+            except:
                 pass
     
     progress_bar.progress(1.0)
@@ -323,11 +319,7 @@ if scan_button:
                 st.dataframe(
                     df_blue.reset_index(drop=True),
                     use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "RSI": st.column_config.NumberColumn(format="%.2f"),
-                        "Preço": st.column_config.NumberColumn(format="R$ %.2f"),
-                    }
+                    hide_index=True
                 )
             else:
                 st.info("ℹ️ Nenhum Blue Chip sobrecomprado ou sobrevendido no momento.")
@@ -340,11 +332,7 @@ if scan_button:
                 st.dataframe(
                     df_small.reset_index(drop=True),
                     use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "RSI": st.column_config.NumberColumn(format="%.2f"),
-                        "Preço": st.column_config.NumberColumn(format="R$ %.2f"),
-                    }
+                    hide_index=True
                 )
             else:
                 st.info("ℹ️ Nenhuma Small Cap sobrecomprada ou sobrevendida no momento.")
@@ -379,99 +367,106 @@ with col1:
 with col2:
     rsi_window = st.slider("Período RSI:", 7, 28, 14)
 
-data = yf.download(ticker, start="2020-01-01", progress=False)
+try:
+    data = yf.download(ticker, start="2020-01-01", progress=False)
+    
+    if data.empty or len(data) == 0:
+        st.error("❌ Não foi possível buscar dados para este ativo.")
+    else:
+        data["RSI"] = calculate_rsi(data["Close"], window=rsi_window)
+        
+        # RSI Plot
+        st.subheader(f"📉 RSI - {stock_choice}")
+        st.markdown(f"<sub>RSI (Relative Strength Index / Índice de Força Relativa)</sub>", unsafe_allow_html=True)
+        
+        fig_rsi, ax_rsi = plt.subplots(figsize=(14, 5))
+        ax_rsi.plot(data.index, data['RSI'], label='RSI', color='purple', linewidth=2)
+        ax_rsi.axhline(70, color='red', linestyle='--', label='Sobrecomprado (70)', linewidth=1.5)
+        ax_rsi.axhline(30, color='green', linestyle='--', label='Sobrevendido (30)', linewidth=1.5)
+        ax_rsi.fill_between(data.index, 70, 100, alpha=0.1, color='red')
+        ax_rsi.fill_between(data.index, 0, 30, alpha=0.1, color='green')
+        ax_rsi.set_title(f"RSI - {stock_choice}", fontsize=14, fontweight='bold')
+        ax_rsi.set_ylabel("RSI", fontsize=12)
+        ax_rsi.set_xlabel("Data", fontsize=12)
+        ax_rsi.legend(loc='best')
+        ax_rsi.grid(True, alpha=0.3)
+        plt.tight_layout()
+        st.pyplot(fig_rsi)
+        
+        # Current RSI Value
+        try:
+            current_rsi = float(data["RSI"].iloc[-1])
+            current_price = float(data["Close"].iloc[-1])
+            price_30d_ago = float(data["Close"].iloc[-30]) if len(data) >= 30 else float(data["Close"].iloc[0])
+            variation = ((current_price / price_30d_ago - 1) * 100)
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("RSI Atual", f"{current_rsi:.2f}")
+            with col2:
+                st.metric("Preço Atual", f"R$ {current_price:.2f}")
+            with col3:
+                st.metric("Variação (30d)", f"{variation:.2f}%")
+        except:
+            st.warning("⚠️ Erro ao calcular métricas")
 
-if data.empty:
-    st.error("❌ Não foi possível buscar dados para este ativo.")
-else:
-    data["RSI"] = calculate_rsi(data["Close"], window=rsi_window)
-    
-    # RSI Plot
-    st.subheader(f"📉 RSI - {stock_choice}")
-    st.markdown(f"<sub>RSI (Relative Strength Index / Índice de Força Relativa)</sub>", unsafe_allow_html=True)
-    
-    fig_rsi, ax_rsi = plt.subplots(figsize=(14, 5))
-    ax_rsi.plot(data.index, data['RSI'], label='RSI', color='purple', linewidth=2)
-    ax_rsi.axhline(70, color='red', linestyle='--', label='Sobrecomprado (70)', linewidth=1.5)
-    ax_rsi.axhline(30, color='green', linestyle='--', label='Sobrevendido (30)', linewidth=1.5)
-    ax_rsi.fill_between(data.index, 70, 100, alpha=0.1, color='red')
-    ax_rsi.fill_between(data.index, 0, 30, alpha=0.1, color='green')
-    ax_rsi.set_title(f"RSI - {stock_choice}", fontsize=14, fontweight='bold')
-    ax_rsi.set_ylabel("RSI", fontsize=12)
-    ax_rsi.set_xlabel("Data", fontsize=12)
-    ax_rsi.legend(loc='best')
-    ax_rsi.grid(True, alpha=0.3)
-    plt.tight_layout()
-    st.pyplot(fig_rsi)
-    
-    # Current RSI Value
-    current_rsi = data["RSI"].iloc[-1]
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("RSI Atual", f"{current_rsi:.2f}")
-    with col2:
-        st.metric("Preço Atual", f"R$ {data['Close'].iloc[-1]:.2f}")
-    with col3:
-        st.metric("Variação (30d)", f"{((data['Close'].iloc[-1] / data['Close'].iloc[-30] - 1) * 100):.2f}%")
+        # Historical Closing Price
+        st.subheader("📊 Preço de Fechamento Histórico")
+        st.markdown("<sub>Evolução do preço nos últimos anos</sub>", unsafe_allow_html=True)
+        
+        fig_price, ax_price = plt.subplots(figsize=(14, 5))
+        ax_price.plot(data.index, data['Close'], label='Preço de Fechamento', color='blue', linewidth=2)
+        ax_price.fill_between(data.index, data['Close'], alpha=0.3, color='blue')
+        ax_price.set_title(f"Preço de Fechamento - {stock_choice}", fontsize=14, fontweight='bold')
+        ax_price.set_ylabel("Preço (R$)", fontsize=12)
+        ax_price.set_xlabel("Data", fontsize=12)
+        ax_price.legend(loc='best')
+        ax_price.grid(True, alpha=0.3)
+        plt.tight_layout()
+        st.pyplot(fig_price)
 
-    # Historical Closing Price
-    st.subheader("📊 Preço de Fechamento Histórico")
-    st.markdown("<sub>Evolução do preço nos últimos anos</sub>", unsafe_allow_html=True)
-    
-    fig_price, ax_price = plt.subplots(figsize=(14, 5))
-    ax_price.plot(data.index, data['Close'], label='Preço de Fechamento', color='blue', linewidth=2)
-    ax_price.fill_between(data.index, data['Close'], alpha=0.3, color='blue')
-    ax_price.set_title(f"Preço de Fechamento - {stock_choice}", fontsize=14, fontweight='bold')
-    ax_price.set_ylabel("Preço (R$)", fontsize=12)
-    ax_price.set_xlabel("Data", fontsize=12)
-    ax_price.legend(loc='best')
-    ax_price.grid(True, alpha=0.3)
-    plt.tight_layout()
-    st.pyplot(fig_price)
+        # Prophet Forecast
+        st.subheader(f"🔮 Previsão para os próximos {future_days} dias")
+        st.markdown(f"<sub>Previsão utilizando Prophet (Meta)</sub>", unsafe_allow_html=True)
+        
+        try:
+            df_forecast = data.reset_index()[['Date', 'Close']].copy()
+            df_forecast.columns = ['ds', 'y']
+            
+            model = Prophet(daily_seasonality=True, interval_width=0.95)
+            with st.spinner("Gerando previsão..."):
+                model.fit(df_forecast)
+            
+            future = model.make_future_dataframe(periods=future_days)
+            forecast = model.predict(future)
+            
+            fig1 = model.plot(forecast, figsize=(14, 6))
+            fig1.suptitle(f"Previsão - {stock_choice}", fontsize=14, fontweight='bold', y=1.00)
+            st.pyplot(fig1)
+            
+            # Forecast Components
+            st.subheader("📉 Componentes da Previsão")
+            st.markdown("<sub>Decomposição da série temporal</sub>", unsafe_allow_html=True)
+            
+            fig2 = model.plot_components(forecast, figsize=(14, 10))
+            st.pyplot(fig2)
+            
+            # Próximas previsões
+            st.subheader("📋 Próximas Previsões")
+            forecast_display = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(future_days).copy()
+            forecast_display.columns = ['Data', 'Previsão', 'Limite Inferior', 'Limite Superior']
+            forecast_display['Data'] = forecast_display['Data'].dt.strftime('%d/%m/%Y')
+            
+            st.dataframe(
+                forecast_display.reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True
+            )
+        except Exception as e:
+            st.error(f"❌ Erro ao gerar previsão: {str(e)}")
 
-    # Prophet Forecast
-    st.subheader(f"🔮 Previsão para os próximos {future_days} dias")
-    st.markdown(f"<sub>Previsão utilizando Prophet (Meta)</sub>", unsafe_allow_html=True)
-    
-    try:
-        df_forecast = data.reset_index()[['Date', 'Close']].copy()
-        df_forecast.columns = ['ds', 'y']
-        
-        model = Prophet(daily_seasonality=True, interval_width=0.95)
-        model.fit(df_forecast)
-        
-        future = model.make_future_dataframe(periods=future_days)
-        forecast = model.predict(future)
-        
-        fig1 = model.plot(forecast, figsize=(14, 6))
-        fig1.suptitle(f"Previsão - {stock_choice}", fontsize=14, fontweight='bold', y=1.00)
-        st.pyplot(fig1)
-        
-        # Forecast Components
-        st.subheader("📉 Componentes da Previsão")
-        st.markdown("<sub>Decomposição da série temporal</sub>", unsafe_allow_html=True)
-        
-        fig2 = model.plot_components(forecast, figsize=(14, 10))
-        st.pyplot(fig2)
-        
-        # Próximas previsões
-        st.subheader("📋 Próximas Previsões")
-        forecast_display = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(future_days).copy()
-        forecast_display.columns = ['Data', 'Previsão', 'Limite Inferior', 'Limite Superior']
-        forecast_display['Data'] = forecast_display['Data'].dt.strftime('%d/%m/%Y')
-        
-        st.dataframe(
-            forecast_display.reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Previsão": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Limite Inferior": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Limite Superior": st.column_config.NumberColumn(format="R$ %.2f"),
-            }
-        )
-    except Exception as e:
-        st.error(f"❌ Erro ao gerar previsão: {str(e)}")
+except Exception as e:
+    st.error(f"❌ Erro ao buscar dados: {str(e)}")
 
 st.divider()
 st.markdown("<sub>⚠️ Aviso: Este aplicativo é apenas para fins informativos. Não constitui recomendação de investimento.</sub>", unsafe_allow_html=True)
