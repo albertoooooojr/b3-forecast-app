@@ -4,6 +4,9 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import concurrent.futures
 from datetime import datetime
+import warnings
+
+warnings.filterwarnings('ignore')
 
 st.set_page_config(page_title="B3 Stock Forecast", layout="wide")
 
@@ -186,14 +189,17 @@ all_stocks = {**blue_chips, **small_caps}
 # ============================
 def calculate_rsi(series, window=14):
     """Calcula o Índice de Força Relativa (RSI)"""
-    delta = series.diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=window).mean()
-    avg_loss = loss.rolling(window=window).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    try:
+        delta = series.diff()
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+        avg_gain = gain.rolling(window=window).mean()
+        avg_loss = loss.rolling(window=window).mean()
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+    except:
+        return None
 
 
 # ============================
@@ -203,12 +209,28 @@ def fetch_rsi_data(name, code):
     """Busca dados e calcula RSI para um ativo"""
     try:
         df = yf.download(code + ".SA", period="6mo", interval="1d", progress=False)
+        
         if df.empty or len(df) < 14:
             return None
         
-        df["RSI"] = calculate_rsi(df["Close"])
-        last_rsi = df["RSI"].iloc[-1]
-        last_price = df["Close"].iloc[-1]
+        # Garantir que Close é uma Series 1D
+        if isinstance(df, pd.DataFrame):
+            close_prices = df["Close"]
+        else:
+            close_prices = df
+        
+        rsi = calculate_rsi(close_prices)
+        
+        if rsi is None or rsi.empty:
+            return None
+        
+        last_rsi = rsi.iloc[-1]
+        
+        # Verificar se é um valor válido
+        if pd.isna(last_rsi):
+            return None
+        
+        last_price = float(close_prices.iloc[-1])
         
         status = ""
         if last_rsi >= 70:
@@ -220,11 +242,11 @@ def fetch_rsi_data(name, code):
             return {
                 "Ativo": name,
                 "Código": code,
-                "RSI": round(last_rsi, 2),
+                "RSI": round(float(last_rsi), 2),
                 "Preço": round(last_price, 2),
                 "Status": status
             }
-    except:
+    except Exception as e:
         pass
     
     return None
@@ -369,73 +391,83 @@ with col2:
 try:
     data = yf.download(ticker, period=f"{days_back}d", progress=False)
     
-    if data.empty or len(data) == 0:
+    if data is None or data.empty or len(data) == 0:
         st.error("❌ Não foi possível buscar dados para este ativo.")
     else:
-        data["RSI"] = calculate_rsi(data["Close"], window=rsi_window)
+        # Garantir que é DataFrame
+        if not isinstance(data, pd.DataFrame):
+            data = pd.DataFrame(data)
         
-        # RSI Plot
-        st.subheader(f"📉 RSI - {stock_choice}")
-        st.markdown(f"<sub>RSI (Relative Strength Index / Índice de Força Relativa)</sub>", unsafe_allow_html=True)
+        # Calcular RSI
+        rsi = calculate_rsi(data["Close"], window=rsi_window)
         
-        fig_rsi, ax_rsi = plt.subplots(figsize=(14, 5))
-        ax_rsi.plot(data.index, data['RSI'], label='RSI', color='purple', linewidth=2)
-        ax_rsi.axhline(70, color='red', linestyle='--', label='Sobrecomprado (70)', linewidth=1.5)
-        ax_rsi.axhline(30, color='green', linestyle='--', label='Sobrevendido (30)', linewidth=1.5)
-        ax_rsi.fill_between(data.index, 70, 100, alpha=0.1, color='red')
-        ax_rsi.fill_between(data.index, 0, 30, alpha=0.1, color='green')
-        ax_rsi.set_title(f"RSI - {stock_choice}", fontsize=14, fontweight='bold')
-        ax_rsi.set_ylabel("RSI", fontsize=12)
-        ax_rsi.set_xlabel("Data", fontsize=12)
-        ax_rsi.legend(loc='best')
-        ax_rsi.grid(True, alpha=0.3)
-        plt.tight_layout()
-        st.pyplot(fig_rsi)
-        
-        # Current RSI Value
-        try:
-            current_rsi = float(data["RSI"].iloc[-1])
-            current_price = float(data["Close"].iloc[-1])
-            price_30d_ago = float(data["Close"].iloc[-30]) if len(data) >= 30 else float(data["Close"].iloc[0])
-            variation = ((current_price / price_30d_ago - 1) * 100)
+        if rsi is not None:
+            data["RSI"] = rsi
             
-            col1, col2, col3 = st.columns(3)
+            # RSI Plot
+            st.subheader(f"📉 RSI - {stock_choice}")
+            st.markdown(f"<sub>RSI (Relative Strength Index / Índice de Força Relativa)</sub>", unsafe_allow_html=True)
+            
+            fig_rsi, ax_rsi = plt.subplots(figsize=(14, 5))
+            ax_rsi.plot(data.index, data['RSI'], label='RSI', color='purple', linewidth=2)
+            ax_rsi.axhline(70, color='red', linestyle='--', label='Sobrecomprado (70)', linewidth=1.5)
+            ax_rsi.axhline(30, color='green', linestyle='--', label='Sobrevendido (30)', linewidth=1.5)
+            ax_rsi.fill_between(data.index, 70, 100, alpha=0.1, color='red')
+            ax_rsi.fill_between(data.index, 0, 30, alpha=0.1, color='green')
+            ax_rsi.set_title(f"RSI - {stock_choice}", fontsize=14, fontweight='bold')
+            ax_rsi.set_ylabel("RSI", fontsize=12)
+            ax_rsi.set_xlabel("Data", fontsize=12)
+            ax_rsi.legend(loc='best')
+            ax_rsi.grid(True, alpha=0.3)
+            plt.tight_layout()
+            st.pyplot(fig_rsi)
+            
+            # Current RSI Value
+            try:
+                current_rsi = float(data["RSI"].iloc[-1])
+                current_price = float(data["Close"].iloc[-1])
+                price_30d_ago = float(data["Close"].iloc[-30]) if len(data) >= 30 else float(data["Close"].iloc[0])
+                variation = ((current_price / price_30d_ago - 1) * 100)
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("RSI Atual", f"{current_rsi:.2f}")
+                with col2:
+                    st.metric("Preço Atual", f"R$ {current_price:.2f}")
+                with col3:
+                    st.metric("Variação (30d)", f"{variation:.2f}%")
+            except Exception as e:
+                st.warning(f"⚠️ Erro ao calcular métricas: {str(e)}")
+
+            # Historical Closing Price
+            st.subheader("📊 Preço de Fechamento Histórico")
+            st.markdown("<sub>Evolução do preço</sub>", unsafe_allow_html=True)
+            
+            fig_price, ax_price = plt.subplots(figsize=(14, 5))
+            ax_price.plot(data.index, data['Close'], label='Preço de Fechamento', color='blue', linewidth=2)
+            ax_price.fill_between(data.index, data['Close'], alpha=0.3, color='blue')
+            ax_price.set_title(f"Preço de Fechamento - {stock_choice}", fontsize=14, fontweight='bold')
+            ax_price.set_ylabel("Preço (R$)", fontsize=12)
+            ax_price.set_xlabel("Data", fontsize=12)
+            ax_price.legend(loc='best')
+            ax_price.grid(True, alpha=0.3)
+            plt.tight_layout()
+            st.pyplot(fig_price)
+
+            # Estatísticas
+            st.subheader("📈 Estatísticas do Ativo")
+            
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("RSI Atual", f"{current_rsi:.2f}")
+                st.metric("Preço Mínimo", f"R$ {data['Close'].min():.2f}")
             with col2:
-                st.metric("Preço Atual", f"R$ {current_price:.2f}")
+                st.metric("Preço Máximo", f"R$ {data['Close'].max():.2f}")
             with col3:
-                st.metric("Variação (30d)", f"{variation:.2f}%")
-        except:
-            st.warning("⚠️ Erro ao calcular métricas")
-
-        # Historical Closing Price
-        st.subheader("📊 Preço de Fechamento Histórico")
-        st.markdown("<sub>Evolução do preço</sub>", unsafe_allow_html=True)
-        
-        fig_price, ax_price = plt.subplots(figsize=(14, 5))
-        ax_price.plot(data.index, data['Close'], label='Preço de Fechamento', color='blue', linewidth=2)
-        ax_price.fill_between(data.index, data['Close'], alpha=0.3, color='blue')
-        ax_price.set_title(f"Preço de Fechamento - {stock_choice}", fontsize=14, fontweight='bold')
-        ax_price.set_ylabel("Preço (R$)", fontsize=12)
-        ax_price.set_xlabel("Data", fontsize=12)
-        ax_price.legend(loc='best')
-        ax_price.grid(True, alpha=0.3)
-        plt.tight_layout()
-        st.pyplot(fig_price)
-
-        # Estatísticas
-        st.subheader("📈 Estatísticas do Ativo")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Preço Mínimo (período)", f"R$ {data['Close'].min():.2f}")
-        with col2:
-            st.metric("Preço Máximo (período)", f"R$ {data['Close'].max():.2f}")
-        with col3:
-            st.metric("Preço Médio (período)", f"R$ {data['Close'].mean():.2f}")
-        with col4:
-            st.metric("Volatilidade", f"{data['Close'].pct_change().std() * 100:.2f}%")
+                st.metric("Preço Médio", f"R$ {data['Close'].mean():.2f}")
+            with col4:
+                st.metric("Volatilidade", f"{data['Close'].pct_change().std() * 100:.2f}%")
+        else:
+            st.error("❌ Erro ao calcular RSI para este ativo.")
 
 except Exception as e:
     st.error(f"❌ Erro ao buscar dados: {str(e)}")
