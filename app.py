@@ -80,9 +80,104 @@ top_stocks = {
     "VALE3 - Vale": "VALE3",
     "VIVT3 - Telefônica": "VIVT3",
     "WEGE3 - WEG": "WEGE3",
-    "YDUQ3 - YDUQS": "YDUQ3"
+    "YDUQ3 - YDUQS": "YDUQ3",
+    # Small Caps
+    "Small Cap - 3TENTOS - TTEN3": "TTEN3",
+    "Small Cap - ABC BRASIL - ABCB4": "ABCB4",
+    "Small Cap - ALLOS - ALOS3": "ALOS3",
+    "Small Cap - ALPARGATAS - ALPA4": "ALPA4",
+    "Small Cap - ALUPAR - ALUP11": "ALUP11",
+    "Small Cap - ANIMA - ANIM3": "ANIM3",
+    "Small Cap - ARMAC - ARML3": "ARML3",
+    "Small Cap - AUREN - AURE3": "AURE3",
+    "Small Cap - AUTOMOB - AMOB3": "AMOB3",
+    "Small Cap - AZZAS 2154 - AZZA3": "AZZA3",
+    "Small Cap - BANCO PAN - BPAN4": "BPAN4",
+    "Small Cap - BANRISUL - BRSR6": "BRSR6",
+    "Small Cap - BEMOBI TECH - BMOB3": "BMOB3",
+    "Small Cap - BLAU - BLAU3": "BLAU3",
+    "Small Cap - BOA SAFRA - SOJA3": "SOJA3",
+    "Small Cap - BR PARTNERS - BRBI11": "BRBI11",
+    "Small Cap - BRASILAGRO - AGRO3": "AGRO3",
+    "Small Cap - BRASKEM - BRKM5": "BRKM5",
+    "Small Cap - BRAVA - BRAV3": "BRAV3",
+    "Small Cap - CAMIL - CAML3": "CAML3",
+    "Small Cap - CASAS BAHIA - BHIA3": "BHIA3",
+    "Small Cap - CBA - CBAV3": "CBAV3",
+    "Small Cap - CEA MODAS - CEAB3": "CEAB3",
+    "Small Cap - COGNA ON - COGN3": "COGN3",
+    "Small Cap - COPASA - CSMG3": "CSMG3",
+    "Small Cap - CURY S/A - CURY3": "CURY3",
+    "Small Cap - CVC BRASIL - CVCB3": "CVCB3",
+    "Small Cap - CYRELA REALT - CYRE4": "CYRE4",
+    "Small Cap - DESKTOP - DESK3": "DESK3",
+    "Small Cap - DIMED - PNVL3": "PNVL3",
+    "Small Cap - DIRECIONAL - DIRR3": "DIRR3",
+    "Small Cap - ECORODOVIAS - ECOR3": "ECOR3",
+    "Small Cap - EZTEC - EZTC3": "EZTC3",
+    "Small Cap - FERBASA - FESA4": "FESA4",
+    "Small Cap - FLEURY - FLRY3": "FLRY3",
+    "Small Cap - FRAS-LE - FRAS3": "FRAS3",
+    "Small Cap - GAFISA - GFSA3": "GFSA3",
+    "Small Cap - GPS - GGPS3": "GGPS3",
+    "Small Cap - GRENDENE - GRND3": "GRND3",
+    "Small Cap - GRUPO MATEUS - GMAT3": "GMAT3",
+    "Small Cap - GRUPO SBF - SBFG3": "SBFG3",
+    "Small Cap - GUARARAPES - GUAR3": "GUAR3",
+    "Small Cap - HELBOR - HBOR3": "HBOR3",
+    "Small Cap - HIDROVIAS - HBSA3": "HBSA3",
+    "Small Cap - IGUATEMI S.A - IGTI11": "IGTI11",
+    "Small Cap - INTELBRAS - INTB3": "INTB3",
+    "Small Cap - IOCHP-MAXION - MYPK3": "MYPK3",
+    "Small Cap - IRANI - RANI3": "RANI3",
+    "Small Cap - IRBBRASIL RE - IRBR3": "IRBR3",
+    "Small Cap - JHSF PART - JHSF3": "JHSF3",
+    "Small Cap - JSL - JSLG3": "JSLG3",
+    "Small Cap - KEPLER WEBER - KEPL3": "KEPL3",
+    "Small Cap - LAVVI - LAVV3": "LAVV3",
+    "Small Cap - LOG COM PROP - LOGG3": "LOGG3",
+    "Small Cap - LWSA - LWSA3": "LWSA3",
+    "Small Cap - M.DIASBRANCO - MDIA3": "MDIA3",
+    "Small Cap - MAGAZ LUIZA - MGLU3": "MGLU3",
+    "Small Cap - MARCOPOLO - POMO4": "POMO4",
+    "Small Cap - MELIUZ - CASH3": "CASH3",
+    "Small Cap - METAL LEVE - LEVE3": "LEVE3",
+    "Small Cap - MILLS - MILS3": "MILS3",
+    "Small Cap - MOURA DUBEUX - MDNE3": "MDNE3",
+    "Small Cap - MOVIDA - MOVI3": "MOVI3",
+    "Small Cap - NATURA - NATU3": "NATU3",
+    "Small Cap - ODONTOPREV - ODPV3": "ODPV3",
+    "Small Cap - ONCOCLINICAS - ONCO3": "ONCO3",
+    "Small Cap - ORIZON - ORVR3": "ORVR3",
+    "Small Cap - P.ACUCAR-CBD - PCAR3": "PCAR3",
+    "Small Cap - PAGUE MENOS - PGMN3": "PGMN3",
+    "Small Cap - PETRORECSA - RECV3": "RECV3",
+    "Small Cap - PETZCOBASI - AUAU3": "AUAU3",
+    "Small Cap - PLANOEPLANO - PLPL3": "PLPL3",
+    "Small Cap - POSITIVO TEC - POSI3": "POSI3",
+    "Small Cap - PRINER - PRNR3": "PRNR3",
+    "Small Cap - QUALICORP - QUAL3": "QUAL3",
+    "Small Cap - QUERO-QUERO - LJQQ3": "LJQQ3",
+    "Small Cap - RANDON PART - RAPT4": "RAPT4",
+    "Small Cap - RECRUSUL - RCSL3": "RCSL3",
+    "Small Cap - RECRUSUL - RCSL4": "RCSL4",
+    "Small Cap - SANEPAR - SAPR11": "SAPR11",
+    "Small Cap - SAO MARTINHO - SMTO3": "SMTO3",
+    "Small Cap - SER EDUCA - SEER3": "SEER3",
+    "Small Cap - SID NACIONAL - CSNA3": "CSNA3",
+    "Small Cap - SIMPAR - SIMH3": "SIMH3",
+    "Small Cap - SMART FIT - SMFT3": "SMFT3",
+    "Small Cap - SYN PROP TEC - SYNE3": "SYNE3",
+    "Small Cap - TEGMA - TGMA3": "TGMA3",
+    "Small Cap - TENDA - TEND3": "TEND3",
+    "Small Cap - TRACK FIELD - TFCO4": "TFCO4",
+    "Small Cap - TUPY - TUPY3": "TUPY3",
+    "Small Cap - UNIPAR - UNIP6": "UNIP6",
+    "Small Cap - VALID - VLID3": "VLID3",
+    "Small Cap - VAMOS - VAMO3": "VAMO3",
+    "Small Cap - VIVARA S.A. - VIVA3": "VIVA3",
+    "Small Cap - VULCABRAS - VULC3": "VULC3",
 }
-
 
 # ============================
 # RSI Function
@@ -97,7 +192,6 @@ def calculate_rsi(series, window=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-
 # ============================
 # RSI Scanner
 # ============================
@@ -105,7 +199,8 @@ st.subheader("🔎 RSI Scanner - Overbought/oversold stocks")
 st.markdown("<sub>🔎 Scanner RSI - Ações Sobrecompradas/Sobrevendidas</sub>", unsafe_allow_html=True)
 
 results = []
-for name, code in list(top_stocks.items())[:35]:  # first 35 for performance
+# AGORA PROCESSA TODOS OS ATIVOS (não apenas os primeiros 35)
+for name, code in top_stocks.items():
     try:
         df = yf.download(code + ".SA", period="6mo", interval="1d", progress=False)
         if df.empty:
