@@ -3,7 +3,6 @@ import pandas as pd
 import yfinance as yf
 from prophet import Prophet
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="B3 Stock Forecast", layout="wide")
 
@@ -11,7 +10,8 @@ st.set_page_config(page_title="B3 Stock Forecast", layout="wide")
 # Title
 # ============================
 st.markdown("## 📈 B3 (Brazil) Stock Forecast")
-st.markdown("<sub>📈 Previsão de Ações da B3 (Brasil) - Cache 5min & Gráficos Interativos</sub>", unsafe_allow_html=True)
+st.markdown("<sub>📈 Previsão de Ações da B3 (Brasil) - Seleção por Clique & Calculadora de Retorno Manual</sub>",
+            unsafe_allow_html=True)
 
 # ============================
 # Top Stocks (Duplicates Removed)
@@ -228,14 +228,44 @@ scanner_results = get_scanner_data(top_stocks)
 df_rsi = pd.DataFrame(scanner_results, columns=["Stock", "Price", "RSI", "Status"])
 df_rsi = df_rsi.sort_values(by="RSI", ascending=True)
 
-st.dataframe(df_rsi, use_container_width=True)
+# Configuração de colunas para centralizar
+column_config = {
+    "Stock": st.column_config.TextColumn("Stock", width="medium"),
+    "Price": st.column_config.NumberColumn("Price", format="R$ %.2f", width="small"),
+    "RSI": st.column_config.NumberColumn("RSI", format="%.2f", width="small"),
+    "Status": st.column_config.TextColumn("Status", width="medium"),
+}
+
+# Tabela com seleção habilitada
+selected_rows = st.dataframe(
+    df_rsi,
+    use_container_width=True,
+    column_config=column_config,
+    hide_index=True,
+    on_select="rerun",
+    selection_mode="single-row"
+)
+
+# Lógica de seleção: Se clicar na tabela, usa essa ação. Senão, usa o selectbox.
+selected_stock_name = None
+if selected_rows and len(selected_rows["selection"]["rows"]) > 0:
+    row_idx = selected_rows["selection"]["rows"][0]
+    selected_stock_name = df_rsi.iloc[row_idx]["Stock"]
 
 # ============================
 # Select stock
 # ============================
-stock_choice = st.selectbox("📌 Now choose a stock to see details:", list(top_stocks.keys()))
-ticker = top_stocks[stock_choice] + ".SA"
+st.subheader("📌 Stock Details")
+stock_list = list(top_stocks.keys())
 
+if selected_stock_name:
+    st.info(f"Ação selecionada na tabela: **{selected_stock_name}**")
+    default_idx = stock_list.index(selected_stock_name)
+    stock_choice = st.selectbox("📌 Or choose another stock manually:", stock_list, index=default_idx)
+else:
+    stock_choice = st.selectbox("📌 Choose a stock to see details:", stock_list)
+
+ticker = top_stocks[stock_choice] + ".SA"
 future_days = st.slider("How many days ahead do you want to forecast?", 7, 90, 30)
 
 
@@ -268,15 +298,6 @@ else:
     df_forecast = data.reset_index()[['Date', 'Close']].copy()
     df_forecast.columns = ['ds', 'y']
 
-    st.subheader("📊 Historical Closing Price")
-    st.markdown("<sub>📊 Preço de fechamento histórico</sub>", unsafe_allow_html=True)
-
-    # Gráfico de Preço Interativo
-    fig_price = go.Figure()
-    fig_price.add_trace(go.Scatter(x=data.index, y=data['Close'], name='Close Price', line=dict(color='blue')))
-    fig_price.update_layout(title="Historical Closing Price", yaxis_title="Price (R$)", height=400)
-    st.plotly_chart(fig_price, use_container_width=True)
-
     # Modelo Prophet
     model = Prophet(daily_seasonality=True)
     model.fit(df_forecast)
@@ -287,26 +308,136 @@ else:
     st.subheader(f"🔮 Forecast for the next {future_days} days")
     st.markdown(f"<sub>🔮 Previsão para os próximos {future_days} dias</sub>", unsafe_allow_html=True)
 
-    # Gráfico de Previsão Interativo
-    fig_forecast = go.Figure()
-    # Dados Históricos
-    fig_forecast.add_trace(go.Scatter(x=df_forecast['ds'], y=df_forecast['y'], name='Historical', mode='markers',
-                                      marker=dict(size=2, color='black')))
-    # Previsão
-    fig_forecast.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], name='Forecast', line=dict(color='blue')))
-    # Intervalo de Confiança
-    fig_forecast.add_trace(
-        go.Scatter(x=forecast['ds'], y=forecast['yhat_upper'], fill=None, mode='lines', line_color='rgba(0,0,255,0)',
-                   showlegend=False))
-    fig_forecast.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], fill='tonexty', mode='lines',
-                                      line_color='rgba(0,0,255,0.2)', name='Confidence Interval'))
+    # ============================
+    # Cálculo das informações de preço atual vs previsão
+    # ============================
+    preco_atual = float(data['Close'].iloc[-1])
 
-    fig_forecast.update_layout(title=f"Forecast for {stock_choice}", yaxis_title="Price (R$)", height=500)
-    st.plotly_chart(fig_forecast, use_container_width=True)
+    # Pegar a previsão para o último dia do período selecionado
+    data_previsao = future['ds'].iloc[-1]
+    previsao_final = float(forecast[forecast['ds'] == data_previsao]['yhat'].iloc[0])
 
-    st.subheader("📉 Forecast Components")
-    st.markdown("<sub>📉 Componentes da previsão</sub>", unsafe_allow_html=True)
+    # Calcular diferenças
+    diferenca_valor = previsao_final - preco_atual
+    diferenca_percentual = (diferenca_valor / preco_atual) * 100
 
-    # Para os componentes, o Prophet usa matplotlib, mas podemos mostrar o gráfico padrão dele
-    fig_comp = model.plot_components(forecast)
-    st.pyplot(fig_comp)
+    # Layout em duas colunas: gráfico (70%) e métricas (30%)
+    col_graf, col_metric = st.columns([0.7, 0.3])
+
+    with col_graf:
+        # Gráfico de Previsão Interativo
+        fig_forecast = go.Figure()
+        # Dados Históricos
+        fig_forecast.add_trace(go.Scatter(x=df_forecast['ds'], y=df_forecast['y'], name='Histórico', mode='markers',
+                                          marker=dict(size=2, color='black')))
+        # Previsão
+        fig_forecast.add_trace(
+            go.Scatter(x=forecast['ds'], y=forecast['yhat'], name='Previsão', line=dict(color='blue')))
+        # Intervalo de Confiança
+        fig_forecast.add_trace(
+            go.Scatter(x=forecast['ds'], y=forecast['yhat_upper'], fill=None, mode='lines',
+                       line_color='rgba(0,0,255,0)',
+                       showlegend=False))
+        fig_forecast.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], fill='tonexty', mode='lines',
+                                          line_color='rgba(0,0,255,0.2)', name='Intervalo de Confiança'))
+
+        fig_forecast.update_layout(
+            title=f"Previsão para {stock_choice}",
+            yaxis_title="Preço (R$)",
+            height=500,
+            legend=dict(
+                yanchor="top",
+                y=0.99,
+                xanchor="left",
+                x=0.01
+            )
+        )
+
+        # Adicionar range slider para zoom
+        fig_forecast.update_xaxes(rangeslider_visible=True)
+
+        st.plotly_chart(fig_forecast, use_container_width=True)
+
+    with col_metric:
+        st.markdown("### 📊 Resumo da Operação")
+
+        with st.container():
+            # Preço Atual
+            st.metric("💰 Preço Atual", f"R$ {preco_atual:.2f}")
+
+            # Linha de separação visual
+            st.divider()
+
+            # Previsão
+            sinal = "+" if diferenca_valor >= 0 else ""
+            st.metric("🎯 Previsão", f"R$ {previsao_final:.2f}",
+                      delta=f"{sinal}{diferenca_valor:.2f}" if abs(diferenca_valor) > 0.01 else "0.00")
+
+            # Diferença em R$
+            st.metric("📈 Diferença (R$)", f"R$ {diferenca_valor:+.2f}")
+
+            # Variação Percentual
+            st.metric("📊 Variação (%)", f"{diferenca_percentual:+.2f}%")
+
+            # Linha de separação
+            st.divider()
+
+            # Intervalo de Confiança
+            st.info(
+                f"📊 **Intervalo de Confiança (95%):**\n\nR$ {forecast['yhat_lower'].iloc[-1]:.2f} - R$ {forecast['yhat_upper'].iloc[-1]:.2f}")
+
+            # Data da previsão
+            st.caption(f"📅 Previsão para: {data_previsao.strftime('%d/%m/%Y')}")
+
+    # ============================
+    # CALCULADORA DE RETORNO MANUAL (SIMPLIFICADA)
+    # ============================
+    st.divider()
+    st.subheader("🧮 Calculadora de Retorno Manual")
+    st.markdown("<sub>Insira os valores para calcular a variação em R$ e %</sub>", unsafe_allow_html=True)
+
+    # Layout em linha com 4 colunas para campos e resultados
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        preco_inicial = st.number_input(
+            "Preço Inicial (R$)",
+            min_value=0.01,
+            value=float(data['Close'].iloc[-1]),
+            step=0.01,
+            format="%.2f",
+            key="preco_inicial"
+        )
+
+    with col2:
+        preco_final = st.number_input(
+            "Preço Final (R$)",
+            min_value=0.01,
+            value=float(data['Close'].iloc[-1]),
+            step=0.01,
+            format="%.2f",
+            key="preco_final"
+        )
+
+    # Cálculo da variação
+    variacao_brl = preco_final - preco_inicial
+    variacao_pct = (variacao_brl / preco_inicial) * 100
+
+    # Determinar a cor do delta baseado no valor (positivo = verde, negativo = vermelho)
+    delta_color = "normal" if variacao_brl >= 0 else "inverse"
+
+    with col3:
+        st.metric(
+            "Variação (R$)",
+            f"R$ {variacao_brl:+.2f}",
+            delta=f"{variacao_brl:+.2f}",
+            delta_color=delta_color
+        )
+
+    with col4:
+        st.metric(
+            "Variação (%)",
+            f"{variacao_pct:+.2f}%",
+            delta=f"{variacao_pct:+.2f}%",
+            delta_color=delta_color
+        )
