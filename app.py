@@ -10,7 +10,7 @@ st.set_page_config(page_title="B3 Stock Forecast", layout="wide")
 # Title
 # ============================
 st.markdown("## 📈 B3 (Brazil) Stock Forecast")
-st.markdown("<sub>📈 Previsão de Ações da B3 (Brasil) - Seleção por Clique & Calculadora de Retorno Manual</sub>",
+st.markdown("<sub>📈 Previsão de Ações da B3 (Brasil)</sub>",
             unsafe_allow_html=True)
 
 # ============================
@@ -350,11 +350,22 @@ else:
                 y=0.99,
                 xanchor="left",
                 x=0.01
-            )
+            ),
+            # Configurar botões de zoom no modo padrão
+            dragmode='zoom',  # Habilita zoom com o mouse
+            hovermode='x unified'
         )
 
-        # Adicionar range slider para zoom
-        fig_forecast.update_xaxes(rangeslider_visible=True)
+        # Configurar o modo de seleção para zoom com a cruzinha
+        fig_forecast.update_layout(
+            xaxis=dict(
+                rangeslider=dict(visible=False),  # Remove a barrinha de range slider
+                type='date'
+            ),
+            yaxis=dict(
+                fixedrange=False  # Permite zoom no eixo Y também
+            )
+        )
 
         st.plotly_chart(fig_forecast, use_container_width=True)
 
