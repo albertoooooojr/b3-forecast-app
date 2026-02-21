@@ -321,8 +321,8 @@ else:
     diferenca_valor = previsao_final - preco_atual
     diferenca_percentual = (diferenca_valor / preco_atual) * 100
 
-    # Layout em duas colunas: gráfico (70%) e métricas (30%)
-    col_graf, col_metric = st.columns([0.7, 0.3])
+    # Layout em duas colunas: gráfico (75%) e métricas (25%)
+    col_graf, col_metric = st.columns([0.75, 0.25])
 
     with col_graf:
         # Gráfico de Previsão Interativo
@@ -370,35 +370,91 @@ else:
         st.plotly_chart(fig_forecast, use_container_width=True)
 
     with col_metric:
-        st.markdown("### 📊 Resumo da Operação")
+        # CSS para ajustar fontes - TODOS OS NÚMEROS AUMENTADOS
+        st.markdown("""
+        <style>
+        .small-font {
+            font-size: 0.9rem !important;
+        }
+        .metric-container {
+            margin-bottom: 0.5rem;
+        }
+        .metric-label {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 0.2rem;
+        }
+        .metric-value {
+            font-size: 1.6rem;  /* AUMENTADO de 1.2rem para 1.6rem */
+            font-weight: bold;
+        }
+        .metric-value-large {
+            font-size: 1.8rem;  /* AUMENTADO de 1.2rem para 1.8rem (preço atual em destaque) */
+            font-weight: bold;
+        }
+        .metric-value-medium {
+            font-size: 1.6rem;  /* AUMENTADO de 1.2rem para 1.6rem */
+            font-weight: bold;
+        }
+        .delta-positive {
+            color: #00cc00;
+            font-size: 1.6rem;  /* AUMENTADO de 1.2rem para 1.6rem */
+        }
+        .delta-negative {
+            color: #ff4444;
+            font-size: 1.6rem;  /* AUMENTADO de 1.2rem para 1.6rem */
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown('<p class="small-font" style="font-size: 1rem; font-weight: bold;">📊 Resumo da Operação</p>',
+                    unsafe_allow_html=True)
 
         with st.container():
-            # Preço Atual
-            st.metric("💰 Preço Atual", f"R$ {preco_atual:.2f}")
+            # Preço Atual - em destaque
+            st.markdown('<div class="metric-container">', unsafe_allow_html=True)
+            st.markdown('<p class="metric-label">💰 Preço Atual</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="metric-value-large">R$ {preco_atual:.2f}</p>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-            # Linha de separação visual
-            st.divider()
+            # Linha de separação visual mais sutil
+            st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.3;'>", unsafe_allow_html=True)
 
-            # Previsão
-            sinal = "+" if diferenca_valor >= 0 else ""
-            st.metric("🎯 Previsão", f"R$ {previsao_final:.2f}",
-                      delta=f"{sinal}{diferenca_valor:.2f}" if abs(diferenca_valor) > 0.01 else "0.00")
+            # Previsão e Delta lado a lado
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown('<p class="metric-label">🎯 Previsão</p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="metric-value-medium">R$ {previsao_final:.2f}</p>', unsafe_allow_html=True)
+            with col2:
+                st.markdown('<p class="metric-label">Delta</p>', unsafe_allow_html=True)
+                sinal = "+" if diferenca_valor >= 0 else ""
+                delta_valor = f"{sinal}{diferenca_valor:.2f}" if abs(diferenca_valor) > 0.01 else "0.00"
+                cor_delta = "delta-positive" if diferenca_valor >= 0 else "delta-negative"
+                st.markdown(f'<p class="metric-value-medium {cor_delta}">R$ {delta_valor}</p>',
+                           unsafe_allow_html=True)
 
             # Diferença em R$
-            st.metric("📈 Diferença (R$)", f"R$ {diferenca_valor:+.2f}")
+            st.markdown('<p class="metric-label">📈 Diferença (R$)</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="metric-value-medium">R$ {diferenca_valor:+.2f}</p>', unsafe_allow_html=True)
 
             # Variação Percentual
-            st.metric("📊 Variação (%)", f"{diferenca_percentual:+.2f}%")
+            st.markdown('<p class="metric-label">📊 Variação (%)</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="metric-value-medium">{diferenca_percentual:+.2f}%</p>', unsafe_allow_html=True)
 
             # Linha de separação
-            st.divider()
+            st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.3;'>", unsafe_allow_html=True)
 
             # Intervalo de Confiança
-            st.info(
-                f"📊 **Intervalo de Confiança (95%):**\n\nR$ {forecast['yhat_lower'].iloc[-1]:.2f} - R$ {forecast['yhat_upper'].iloc[-1]:.2f}")
+            st.markdown(f'''
+            <div style="background-color: #f0f2f6; padding: 0.5rem; border-radius: 0.3rem; font-size: 0.9rem;">
+                <b>📊 Intervalo de Confiança (95%)</b><br>
+                <span style="font-size: 1.5rem; font-weight: bold;">R$ {forecast['yhat_lower'].iloc[-1]:.2f} - R$ {forecast['yhat_upper'].iloc[-1]:.2f}</span>
+            </div>
+            ''', unsafe_allow_html=True)
 
             # Data da previsão
-            st.caption(f"📅 Previsão para: {data_previsao.strftime('%d/%m/%Y')}")
+            st.markdown(f'<p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem; text-align: right;">📅 {data_previsao.strftime("%d/%m/%Y")}</p>',
+                       unsafe_allow_html=True)
 
     # ============================
     # CALCULADORA DE RETORNO MANUAL (SIMPLIFICADA)
