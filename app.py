@@ -187,16 +187,33 @@ def calculate_rsi(series, window=14):
 
 
 # ============================
-# NOVA FUNÇÃO: Filtrar ações por preço > R$7,00
+# NOVO: Slider para escolher o valor mínimo
+# ============================
+st.sidebar.header("⚙️ Configurações de Filtro")
+min_price = st.sidebar.slider(
+    "💵 Preço mínimo da ação (R$):",
+    min_value=1.0,
+    max_value=50.0,
+    value=7.0,  # Valor padrão
+    step=0.5,
+    help="Selecione o valor mínimo para filtrar as ações. Apenas ações com preço acima deste valor serão mostradas."
+)
+
+# Mostrar valor selecionado no sidebar
+st.sidebar.info(f"🔎 Mostrando ações com preço > R$ {min_price:.2f}")
+
+
+# ============================
+# FUNÇÃO ATUALIZADA: Filtrar ações por preço dinâmico
 # ============================
 @st.cache_data(ttl=300)
-def get_filtered_stocks(stocks_dict, min_price=7.0):
+def get_filtered_stocks(stocks_dict, min_price_value):
     """
-    Retorna um dicionário apenas com ações cujo preço atual > min_price
+    Retorna um dicionário apenas com ações cujo preço atual > min_price_value
     """
     filtered_stocks = {}
 
-    with st.spinner("🔍 Filtrando ações com preço > R$ 7,00..."):
+    with st.spinner(f"🔍 Filtrando ações com preço > R$ {min_price_value:.2f}..."):
         progress_bar = st.progress(0)
         total = len(stocks_dict)
 
@@ -209,8 +226,8 @@ def get_filtered_stocks(stocks_dict, min_price=7.0):
                 if not hist.empty:
                     last_price = float(hist['Close'].iloc[-1])
 
-                    # Só incluir se preço > 7.00
-                    if last_price > min_price:
+                    # Só incluir se preço > min_price_value
+                    if last_price > min_price_value:
                         filtered_stocks[name] = code
 
                 # Atualizar progresso
@@ -224,10 +241,10 @@ def get_filtered_stocks(stocks_dict, min_price=7.0):
 
 
 # ============================
-# Cache Data (5 minutes)
+# FUNÇÃO ATUALIZADA: Scanner RSI com filtro dinâmico
 # ============================
 @st.cache_data(ttl=300)
-def get_scanner_data(stocks_dict):
+def get_scanner_data(stocks_dict, min_price_value):
     results = []
     for name, code in stocks_dict.items():
         try:
@@ -238,8 +255,8 @@ def get_scanner_data(stocks_dict):
             last_rsi_val = float(df["RSI"].iloc[-1])
             last_price_val = float(df["Close"].iloc[-1])
 
-            # FILTRO: Apenas ações com preço maior que R$ 7,00
-            if last_price_val > 7.0:
+            # FILTRO DINÂMICO: Usar o valor do slider
+            if last_price_val > min_price_value:
                 status = ""
                 if last_rsi_val >= 70:
                     status = "🔴 Overbought"
@@ -254,56 +271,66 @@ def get_scanner_data(stocks_dict):
 
 
 # ============================
-# RSI Scanner
+# RSI Scanner (AGORA USANDO O FILTRO DINÂMICO)
 # ============================
 st.subheader("🔎 RSI Scanner - Overbought/oversold stocks")
-st.markdown("<sub>🔎 Scanner RSI - Ações Sobrecompradas/Sobrevendidas (Preço > R$ 7,00)</sub>", unsafe_allow_html=True)
+st.markdown(f"<sub>🔎 Scanner RSI - Ações Sobrecompradas/Sobrevendidas (Preço > R$ {min_price:.2f})</sub>",
+            unsafe_allow_html=True)
 
-# Usar a função com cache
-scanner_results = get_scanner_data(top_stocks)
+# Usar a função com cache e o valor dinâmico do slider
+scanner_results = get_scanner_data(top_stocks, min_price)
 
 # Criar DataFrame e ordenar por RSI de forma crescente (ascending)
-df_rsi = pd.DataFrame(scanner_results, columns=["Stock", "Price", "RSI", "Status"])
-df_rsi = df_rsi.sort_values(by="RSI", ascending=True)
+if scanner_results:
+    df_rsi = pd.DataFrame(scanner_results, columns=["Stock", "Price", "RSI", "Status"])
+    df_rsi = df_rsi.sort_values(by="RSI", ascending=True)
 
-# Configuração de colunas para centralizar
-column_config = {
-    "Stock": st.column_config.TextColumn("Stock", width="medium"),
-    "Price": st.column_config.NumberColumn("Price", format="R$ %.2f", width="small"),
-    "RSI": st.column_config.NumberColumn("RSI", format="%.2f", width="small"),
-    "Status": st.column_config.TextColumn("Status", width="medium"),
-}
+    # Configuração de colunas para centralizar
+    column_config = {
+        "Stock": st.column_config.TextColumn("Stock", width="medium"),
+        "Price": st.column_config.NumberColumn("Price", format="R$ %.2f", width="small"),
+        "RSI": st.column_config.NumberColumn("RSI", format="%.2f", width="small"),
+        "Status": st.column_config.TextColumn("Status", width="medium"),
+    }
 
-# Tabela com seleção habilitada
-event = st.dataframe(
-    df_rsi,
-    use_container_width=True,
-    column_config=column_config,
-    hide_index=True,
-    on_select="rerun",
-    selection_mode="single-row",
-    key="rsi_scanner"
-)
+    # Tabela com seleção habilitada
+    event = st.dataframe(
+        df_rsi,
+        use_container_width=True,
+        column_config=column_config,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="rsi_scanner"
+    )
 
-# Lógica de seleção: Se clicar na tabela, usa essa ação. Senão, usa o selectbox.
-selected_stock_name = None
-if event and event.selection and len(event.selection.rows) > 0:
-    row_idx = event.selection.rows[0]
-    selected_stock_name = df_rsi.iloc[row_idx]["Stock"]
+    # Lógica de seleção: Se clicar na tabela, usa essa ação.
+    selected_stock_name = None
+    if event and event.selection and len(event.selection.rows) > 0:
+        row_idx = event.selection.rows[0]
+        selected_stock_name = df_rsi.iloc[row_idx]["Stock"]
+
+    # Mostrar contagem de resultados
+    st.caption(f"📊 {len(scanner_results)} ações encontradas com RSI extremo e preço > R$ {min_price:.2f}")
+
+else:
+    st.warning(f"⚠️ Nenhuma ação encontrada com RSI extremo e preço > R$ {min_price:.2f}")
+    selected_stock_name = None
+    df_rsi = pd.DataFrame()
 
 # ============================
-# NOVO: Obter lista filtrada de ações para o selectbox
+# Selectbox com filtro dinâmico
 # ============================
 st.subheader("📌 Stock Details")
 
 # Mostrar indicador de carregamento enquanto filtra
-with st.spinner("Carregando lista de ações com preço > R$ 7,00..."):
-    # Usar cache para não filtrar toda hora
-    filtered_stocks = get_filtered_stocks(top_stocks)
+with st.spinner(f"Carregando lista de ações com preço > R$ {min_price:.2f}..."):
+    # Usar cache com o valor dinâmico do slider
+    filtered_stocks = get_filtered_stocks(top_stocks, min_price)
 
 # Verificar se temos ações filtradas
 if not filtered_stocks:
-    st.warning("⚠️ Nenhuma ação encontrada com preço superior a R$ 7,00 no momento.")
+    st.warning(f"⚠️ Nenhuma ação encontrada com preço superior a R$ {min_price:.2f} no momento.")
     st.stop()
 
 # Criar lista apenas com ações filtradas
@@ -314,18 +341,18 @@ if selected_stock_name and selected_stock_name in filtered_stock_list:
     st.info(f"Ação selecionada na tabela: **{selected_stock_name}**")
     default_idx = filtered_stock_list.index(selected_stock_name)
     stock_choice = st.selectbox(
-        "📌 Escolha uma ação para ver os detalhes (apenas ações > R$7,00):",
+        f"📌 Escolha uma ação para ver os detalhes (apenas ações > R$ {min_price:.2f}):",
         filtered_stock_list,
         index=default_idx
     )
 else:
     stock_choice = st.selectbox(
-        "📌 Escolha uma ação para ver os detalhes (apenas ações > R$7,00):",
+        f"📌 Escolha uma ação para ver os detalhes (apenas ações > R$ {min_price:.2f}):",
         filtered_stock_list
     )
 
 # Mostrar contagem de ações disponíveis
-st.caption(f"📊 {len(filtered_stock_list)} ações disponíveis com preço > R$ 7,00")
+st.caption(f"📊 {len(filtered_stock_list)} ações disponíveis com preço > R$ {min_price:.2f}")
 
 ticker = filtered_stocks[stock_choice] + ".SA"
 future_days = st.slider("How many days ahead do you want to forecast?", 7, 90, 30)
@@ -364,7 +391,7 @@ else:
     model = Prophet(daily_seasonality=True)
     model.fit(df_forecast)
 
-    future = model.make_future_dataframe(periods=future_days)  # CORRIGIDO: usar future_days
+    future = model.make_future_dataframe(periods=future_days)
     forecast = model.predict(future)
 
     st.subheader(f"🔮 Forecast for the next {future_days} days")
@@ -413,26 +440,24 @@ else:
                 xanchor="left",
                 x=0.01
             ),
-            # Configurar botões de zoom no modo padrão
-            dragmode='zoom',  # Habilita zoom com o mouse
+            dragmode='zoom',
             hovermode='x unified'
         )
 
-        # Configurar o modo de seleção para zoom com a cruzinha
         fig_forecast.update_layout(
             xaxis=dict(
-                rangeslider=dict(visible=False),  # Remove a barrinha de range slider
+                rangeslider=dict(visible=False),
                 type='date'
             ),
             yaxis=dict(
-                fixedrange=False  # Permite zoom no eixo Y também
+                fixedrange=False
             )
         )
 
         st.plotly_chart(fig_forecast, use_container_width=True)
 
     with col_metric:
-        # CSS para ajustar fontes - TODOS OS NÚMEROS AUMENTADOS
+        # CSS para ajustar fontes
         st.markdown("""
         <style>
         .small-font {
@@ -473,16 +498,13 @@ else:
                     unsafe_allow_html=True)
 
         with st.container():
-            # Preço Atual - em destaque
             st.markdown('<div class="metric-container">', unsafe_allow_html=True)
             st.markdown('<p class="metric-label">💰 Preço Atual</p>', unsafe_allow_html=True)
             st.markdown(f'<p class="metric-value-large">R$ {preco_atual:.2f}</p>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Linha de separação visual mais sutil
             st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.3;'>", unsafe_allow_html=True)
 
-            # Previsão e Delta lado a lado
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown('<p class="metric-label">🎯 Previsão</p>', unsafe_allow_html=True)
@@ -495,18 +517,14 @@ else:
                 st.markdown(f'<p class="metric-value-medium {cor_delta}">R$ {delta_valor}</p>',
                             unsafe_allow_html=True)
 
-            # Diferença em R$
             st.markdown('<p class="metric-label">📈 Diferença (R$)</p>', unsafe_allow_html=True)
             st.markdown(f'<p class="metric-value-medium">R$ {diferenca_valor:+.2f}</p>', unsafe_allow_html=True)
 
-            # Variação Percentual
             st.markdown('<p class="metric-label">📊 Variação (%)</p>', unsafe_allow_html=True)
             st.markdown(f'<p class="metric-value-medium">{diferenca_percentual:+.2f}%</p>', unsafe_allow_html=True)
 
-            # Linha de separação
             st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.3;'>", unsafe_allow_html=True)
 
-            # Intervalo de Confiança
             st.markdown(f'''
             <div style="background-color: #f0f2f6; padding: 0.5rem; border-radius: 0.3rem; font-size: 0.9rem;">
                 <b>📊 Intervalo de Confiança (95%)</b><br>
@@ -514,19 +532,17 @@ else:
             </div>
             ''', unsafe_allow_html=True)
 
-            # Data da previsão
             st.markdown(
                 f'<p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem; text-align: right;">📅 {data_previsao.strftime("%d/%m/%Y")}</p>',
                 unsafe_allow_html=True)
 
     # ============================
-    # CALCULADORA DE RETORNO MANUAL (SIMPLIFICADA)
+    # CALCULADORA DE RETORNO MANUAL
     # ============================
     st.divider()
     st.subheader("🧮 Calculadora de Retorno Manual")
     st.markdown("<sub>Insira os valores para calcular a variação em R$ e %</sub>", unsafe_allow_html=True)
 
-    # Layout em linha com 4 colunas para campos e resultados
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -549,11 +565,9 @@ else:
             key="preco_final"
         )
 
-    # Cálculo da variação
     variacao_brl = preco_final - preco_inicial
     variacao_pct = (variacao_brl / preco_inicial) * 100 if preco_inicial > 0 else 0
 
-    # Determinar a cor do delta baseado no valor (positivo = verde, negativo = vermelho)
     delta_color = "normal" if variacao_brl >= 0 else "inverse"
 
     with col3:
