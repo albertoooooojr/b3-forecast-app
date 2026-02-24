@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 from prophet import Prophet
 import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="B3 Stock Forecast", layout="wide")
 
@@ -186,6 +187,43 @@ def calculate_rsi(series, window=14):
 
 
 # ============================
+# NOVA FUNÇÃO: Filtrar ações por preço > R$7,00
+# ============================
+@st.cache_data(ttl=300)
+def get_filtered_stocks(stocks_dict, min_price=7.0):
+    """
+    Retorna um dicionário apenas com ações cujo preço atual > min_price
+    """
+    filtered_stocks = {}
+
+    with st.spinner("🔍 Filtrando ações com preço > R$ 7,00..."):
+        progress_bar = st.progress(0)
+        total = len(stocks_dict)
+
+        for i, (name, code) in enumerate(stocks_dict.items()):
+            try:
+                # Pegar apenas o último preço disponível (mais rápido)
+                ticker = yf.Ticker(code + ".SA")
+                hist = ticker.history(period="1d")
+
+                if not hist.empty:
+                    last_price = float(hist['Close'].iloc[-1])
+
+                    # Só incluir se preço > 7.00
+                    if last_price > min_price:
+                        filtered_stocks[name] = code
+
+                # Atualizar progresso
+                progress_bar.progress((i + 1) / total)
+
+            except Exception as e:
+                continue
+
+    progress_bar.empty()
+    return filtered_stocks
+
+
+# ============================
 # Cache Data (5 minutes)
 # ============================
 @st.cache_data(ttl=300)
@@ -237,35 +275,59 @@ column_config = {
 }
 
 # Tabela com seleção habilitada
-selected_rows = st.dataframe(
+event = st.dataframe(
     df_rsi,
     use_container_width=True,
     column_config=column_config,
     hide_index=True,
     on_select="rerun",
-    selection_mode="single-row"
+    selection_mode="single-row",
+    key="rsi_scanner"
 )
 
 # Lógica de seleção: Se clicar na tabela, usa essa ação. Senão, usa o selectbox.
 selected_stock_name = None
-if selected_rows and len(selected_rows["selection"]["rows"]) > 0:
-    row_idx = selected_rows["selection"]["rows"][0]
+if event and event.selection and len(event.selection.rows) > 0:
+    row_idx = event.selection.rows[0]
     selected_stock_name = df_rsi.iloc[row_idx]["Stock"]
 
 # ============================
-# Select stock
+# NOVO: Obter lista filtrada de ações para o selectbox
 # ============================
 st.subheader("📌 Stock Details")
-stock_list = list(top_stocks.keys())
 
-if selected_stock_name:
+# Mostrar indicador de carregamento enquanto filtra
+with st.spinner("Carregando lista de ações com preço > R$ 7,00..."):
+    # Usar cache para não filtrar toda hora
+    filtered_stocks = get_filtered_stocks(top_stocks)
+
+# Verificar se temos ações filtradas
+if not filtered_stocks:
+    st.warning("⚠️ Nenhuma ação encontrada com preço superior a R$ 7,00 no momento.")
+    st.stop()
+
+# Criar lista apenas com ações filtradas
+filtered_stock_list = list(filtered_stocks.keys())
+
+# Selectbox com apenas ações filtradas
+if selected_stock_name and selected_stock_name in filtered_stock_list:
     st.info(f"Ação selecionada na tabela: **{selected_stock_name}**")
-    default_idx = stock_list.index(selected_stock_name)
-    stock_choice = st.selectbox("📌 Or choose another stock manually:", stock_list, index=default_idx)
+    default_idx = filtered_stock_list.index(selected_stock_name)
+    stock_choice = st.selectbox(
+        "📌 Escolha uma ação para ver os detalhes (apenas ações > R$7,00):",
+        filtered_stock_list,
+        index=default_idx
+    )
 else:
-    stock_choice = st.selectbox("📌 Choose a stock to see details:", stock_list)
+    stock_choice = st.selectbox(
+        "📌 Escolha uma ação para ver os detalhes (apenas ações > R$7,00):",
+        filtered_stock_list
+    )
 
-ticker = top_stocks[stock_choice] + ".SA"
+# Mostrar contagem de ações disponíveis
+st.caption(f"📊 {len(filtered_stock_list)} ações disponíveis com preço > R$ 7,00")
+
+ticker = filtered_stocks[stock_choice] + ".SA"
 future_days = st.slider("How many days ahead do you want to forecast?", 7, 90, 30)
 
 
@@ -302,7 +364,7 @@ else:
     model = Prophet(daily_seasonality=True)
     model.fit(df_forecast)
 
-    future = model.make_future_dataframe(periods=90)
+    future = model.make_future_dataframe(periods=future_days)  # CORRIGIDO: usar future_days
     forecast = model.predict(future)
 
     st.subheader(f"🔮 Forecast for the next {future_days} days")
@@ -385,24 +447,24 @@ else:
             margin-bottom: 0.2rem;
         }
         .metric-value {
-            font-size: 1.6rem;  /* AUMENTADO de 1.2rem para 1.6rem */
+            font-size: 1.6rem;
             font-weight: bold;
         }
         .metric-value-large {
-            font-size: 1.8rem;  /* AUMENTADO de 1.2rem para 1.8rem (preço atual em destaque) */
+            font-size: 1.8rem;
             font-weight: bold;
         }
         .metric-value-medium {
-            font-size: 1.6rem;  /* AUMENTADO de 1.2rem para 1.6rem */
+            font-size: 1.6rem;
             font-weight: bold;
         }
         .delta-positive {
             color: #00cc00;
-            font-size: 1.6rem;  /* AUMENTADO de 1.2rem para 1.6rem */
+            font-size: 1.6rem;
         }
         .delta-negative {
             color: #ff4444;
-            font-size: 1.6rem;  /* AUMENTADO de 1.2rem para 1.6rem */
+            font-size: 1.6rem;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -431,7 +493,7 @@ else:
                 delta_valor = f"{sinal}{diferenca_valor:.2f}" if abs(diferenca_valor) > 0.01 else "0.00"
                 cor_delta = "delta-positive" if diferenca_valor >= 0 else "delta-negative"
                 st.markdown(f'<p class="metric-value-medium {cor_delta}">R$ {delta_valor}</p>',
-                           unsafe_allow_html=True)
+                            unsafe_allow_html=True)
 
             # Diferença em R$
             st.markdown('<p class="metric-label">📈 Diferença (R$)</p>', unsafe_allow_html=True)
@@ -453,8 +515,9 @@ else:
             ''', unsafe_allow_html=True)
 
             # Data da previsão
-            st.markdown(f'<p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem; text-align: right;">📅 {data_previsao.strftime("%d/%m/%Y")}</p>',
-                       unsafe_allow_html=True)
+            st.markdown(
+                f'<p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem; text-align: right;">📅 {data_previsao.strftime("%d/%m/%Y")}</p>',
+                unsafe_allow_html=True)
 
     # ============================
     # CALCULADORA DE RETORNO MANUAL (SIMPLIFICADA)
@@ -488,7 +551,7 @@ else:
 
     # Cálculo da variação
     variacao_brl = preco_final - preco_inicial
-    variacao_pct = (variacao_brl / preco_inicial) * 100
+    variacao_pct = (variacao_brl / preco_inicial) * 100 if preco_inicial > 0 else 0
 
     # Determinar a cor do delta baseado no valor (positivo = verde, negativo = vermelho)
     delta_color = "normal" if variacao_brl >= 0 else "inverse"
