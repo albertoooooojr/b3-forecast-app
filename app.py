@@ -361,7 +361,7 @@ future_days = st.slider("How many days ahead do you want to forecast?", 7, 90, 3
 # Cache para o download da ação individual
 @st.cache_data(ttl=300)
 def get_stock_data(ticker_code):
-    return yf.download(ticker_code, start="2000-01-01", progress=False)
+    return yf.download(ticker_code, start="2020-01-01", progress=False)
 
 
 data = get_stock_data(ticker)
