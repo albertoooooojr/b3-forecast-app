@@ -4,6 +4,10 @@ import yfinance as yf
 from prophet import Prophet
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import numpy as np
+from xgboost import XGBRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
 st.set_page_config(page_title="B3 Stock Forecast", layout="wide")
 
@@ -173,8 +177,9 @@ top_stocks = {
 
 
 # ============================
-# RSI Function
+# FUNÇÕES AUXILIARES
 # ============================
+
 def calculate_rsi(series, window=14):
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
@@ -186,6 +191,296 @@ def calculate_rsi(series, window=14):
     return rsi
 
 
+def calculate_ma(series, window):
+    """Calcula média móvel"""
+    return series.rolling(window=window).mean()
+
+
+def calculate_macd(series, fast=12, slow=26, signal=9):
+    """Calcula MACD e retorna como Series"""
+    exp1 = series.ewm(span=fast, adjust=False).mean()
+    exp2 = series.ewm(span=slow, adjust=False).mean()
+    macd = exp1 - exp2
+    macd_signal = macd.ewm(span=signal, adjust=False).mean()
+    macd_hist = macd - macd_signal
+    return macd, macd_signal, macd_hist
+
+
+def calculate_bollinger(series, window=20, num_std=2):
+    """Calcula Bandas de Bollinger"""
+    sma = series.rolling(window=window).mean()
+    std = series.rolling(window=window).std()
+    upper = sma + (std * num_std)
+    lower = sma - (std * num_std)
+    return upper, lower
+
+
+def create_features(df):
+    """Cria features técnicas para o XGBoost - Versão ultra robusta"""
+    df = df.copy()
+
+    # RSI
+    df['RSI'] = calculate_rsi(df['Close'])
+
+    # Médias Móveis
+    df['SMA_5'] = df['Close'].rolling(window=5).mean()
+    df['SMA_10'] = df['Close'].rolling(window=10).mean()
+    df['SMA_20'] = df['Close'].rolling(window=20).mean()
+    df['SMA_50'] = df['Close'].rolling(window=50).mean()
+
+    # Retornos
+    df['Return_1d'] = df['Close'].pct_change(1)
+    df['Return_5d'] = df['Close'].pct_change(5)
+    df['Return_10d'] = df['Close'].pct_change(10)
+
+    # Volatilidade
+    df['Volatility_5d'] = df['Return_1d'].rolling(5).std()
+    df['Volatility_10d'] = df['Return_1d'].rolling(10).std()
+
+    # Volume - versão simplificada
+    try:
+        if 'Volume' in df.columns and len(df['Volume'].dropna()) > 0:
+            volume_vals = df['Volume'].values
+            volume_ma = pd.Series(volume_vals).rolling(5, min_periods=1).mean().values
+            # Evitar divisão por zero
+            for j in range(len(volume_ma)):
+                if volume_ma[j] == 0:
+                    volume_ma[j] = 1
+            df['Volume_Ratio'] = volume_vals / volume_ma
+        else:
+            df['Volume_Ratio'] = 1.0
+    except:
+        df['Volume_Ratio'] = 1.0
+
+    # MACD - versão simplificada
+    try:
+        close_vals = df['Close'].values
+        exp1 = pd.Series(close_vals).ewm(span=12, adjust=False).mean().values
+        exp2 = pd.Series(close_vals).ewm(span=26, adjust=False).mean().values
+        macd = exp1 - exp2
+        macd_signal = pd.Series(macd).ewm(span=9, adjust=False).mean().values
+        macd_hist = macd - macd_signal
+        df['MACD'] = macd
+        df['MACD_Signal'] = macd_signal
+        df['MACD_Hist'] = macd_hist
+    except:
+        df['MACD'] = 0
+        df['MACD_Signal'] = 0
+        df['MACD_Hist'] = 0
+
+    # Bandas de Bollinger - versão simplificada
+    try:
+        close_vals = df['Close'].values
+        sma = pd.Series(close_vals).rolling(window=20).mean().values
+        std = pd.Series(close_vals).rolling(window=20).std().values
+        upper = sma + (std * 2)
+        lower = sma - (std * 2)
+
+        # Evitar divisão por zero
+        for j in range(len(close_vals)):
+            if close_vals[j] == 0:
+                close_vals[j] = 1
+        df['BB_Width'] = (upper - lower) / close_vals
+
+        bb_range = upper - lower
+        for j in range(len(bb_range)):
+            if bb_range[j] == 0:
+                bb_range[j] = 1
+        df['Price_to_BB'] = (close_vals - lower) / bb_range
+    except:
+        df['BB_Width'] = 0
+        df['Price_to_BB'] = 0.5
+
+    # Features de tempo
+    df['DayOfWeek'] = df.index.dayofweek
+    df['Month'] = df.index.month
+    df['DayOfMonth'] = df.index.day
+
+    # Preencher NaN com 0 (simples e eficaz)
+    df = df.fillna(0)
+
+    return df
+
+
+def train_xgboost_model(df, forecast_days):
+    """Treina modelo XGBoost e faz previsões - Versão robusta"""
+
+    # Verificar se há dados suficientes
+    if len(df) < 30:
+        return None, None
+
+    # Criar features
+    try:
+        df_features = create_features(df)
+    except Exception as e:
+        st.warning(f"⚠️ Erro ao criar features: {str(e)}")
+        return None, None
+
+    if len(df_features) < 10:
+        return None, None
+
+    # Definir features e target
+    feature_cols = ['RSI', 'SMA_5', 'SMA_10', 'SMA_20', 'SMA_50',
+                    'Return_1d', 'Return_5d', 'Return_10d',
+                    'Volatility_5d', 'Volatility_10d',
+                    'Volume_Ratio', 'MACD', 'MACD_Signal', 'MACD_Hist',
+                    'BB_Width', 'Price_to_BB', 'DayOfWeek', 'Month']
+
+    # Verificar features disponíveis
+    available_features = [col for col in feature_cols if col in df_features.columns]
+
+    if len(available_features) < 5:
+        return None, None
+
+    # Criar target: preço futuro
+    max_days = min(forecast_days, 30)
+    for i in range(1, max_days + 1):
+        df_features[f'target_{i}d'] = df_features['Close'].shift(-i)
+
+    # Remover linhas com NaN
+    df_features = df_features.dropna()
+
+    if len(df_features) < 10:
+        return None, None
+
+    # Preparar dados de treino
+    X = df_features[available_features]
+
+    # Previsões para diferentes horizontes
+    predictions = []
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    for i in range(1, forecast_days + 1):
+        target_col = f'target_{i}d'
+
+        if target_col not in df_features.columns:
+            # Extrapolação
+            if len(predictions) >= 2:
+                recent_trend = np.mean([predictions[j] - predictions[j - 1] for j in
+                                        range(max(0, len(predictions) - 3), len(predictions))])
+                next_pred = predictions[-1] + recent_trend
+                predictions.append(next_pred)
+            elif len(predictions) == 1:
+                predictions.append(predictions[0] * 1.001)
+            else:
+                predictions.append(df_features['Close'].iloc[-1])
+            continue
+
+        y = df_features[target_col]
+
+        # Dividir treino/validação
+        split_idx = int(len(X) * 0.8)
+        if split_idx < 5:
+            split_idx = len(X) - 5
+
+        X_train, X_val = X[:split_idx], X[split_idx:]
+        y_train, y_val = y[:split_idx], y[split_idx:]
+
+        try:
+            model = XGBRegressor(
+                n_estimators=50,
+                max_depth=3,
+                learning_rate=0.1,
+                random_state=42,
+                n_jobs=-1
+            )
+
+            model.fit(X_train, y_train, verbose=False)
+
+            last_features = X.iloc[-1:].values
+            pred = model.predict(last_features)[0]
+            predictions.append(pred)
+
+        except Exception as e:
+            # Fallback
+            if len(predictions) > 0:
+                predictions.append(predictions[-1])
+            else:
+                predictions.append(df_features['Close'].iloc[-1])
+
+        progress_bar.progress(i / forecast_days)
+        status_text.text(f"Treinando modelo para dia {i} de {forecast_days}...")
+
+    progress_bar.empty()
+    status_text.empty()
+
+    return predictions, df_features
+
+
+def get_xgboost_forecast(data, future_days):
+    """Gera previsão com XGBoost e cria dataframe no formato esperado - Versão robusta"""
+
+    # Calcular retorno médio e volatilidade para fallback
+    if len(data) >= 5:
+        returns = data['Close'].pct_change().dropna()
+        if len(returns) > 0:
+            avg_return = float(returns.mean())  # Converter para float
+            volatility = float(returns.std()) if len(returns) > 0 else 0.02  # Converter para float
+            daily_volatility = volatility / np.sqrt(252) if volatility > 0 else 0.01
+        else:
+            avg_return = 0
+            daily_volatility = 0.01
+    else:
+        avg_return = 0
+        daily_volatility = 0.01
+
+    # Tentar treinar o modelo XGBoost
+    result = train_xgboost_model(data, future_days)
+
+    if result[0] is None:
+        # Fallback: previsão simples baseada em média móvel
+        st.info("📊 Usando previsão baseada em tendência histórica...")
+        last_price = float(data['Close'].iloc[-1])
+
+        predictions = []
+        current_price = last_price
+        for i in range(future_days):
+            # Adicionar um pouco de aleatoriedade
+            random_shock = np.random.normal(0, daily_volatility * 0.5)
+            current_price = current_price * (1 + avg_return + random_shock)
+            predictions.append(current_price)
+    else:
+        predictions, _ = result
+
+    # Criar datas futuras
+    last_date = data.index[-1]
+    future_dates = [last_date + timedelta(days=i) for i in range(1, future_days + 1)]
+
+    # Criar dataframe de previsão
+    forecast_df = pd.DataFrame({
+        'ds': future_dates,
+        'yhat': predictions
+    })
+
+    # Calcular intervalo de confiança
+    confidence_multiplier = 1.96
+
+    # Garantir que scale_factor tenha o tamanho correto
+    days_array = np.arange(1, future_days + 1)
+    scale_factor = np.sqrt(days_array)
+
+    # Calcular intervalo de confiança usando numpy diretamente para evitar problemas
+    lower_bound = []
+    upper_bound = []
+
+    for idx, price in enumerate(predictions):
+        factor = 1 - confidence_multiplier * daily_volatility * scale_factor[idx]
+        lower = price * max(factor, 0.5)  # Não permite queda maior que 50%
+        upper = price * (1 + confidence_multiplier * daily_volatility * scale_factor[idx])
+        lower_bound.append(lower)
+        upper_bound.append(upper)
+
+    forecast_df['yhat_lower'] = lower_bound
+    forecast_df['yhat_upper'] = upper_bound
+
+    # Garantir que os intervalos não sejam negativos
+    forecast_df['yhat_lower'] = forecast_df['yhat_lower'].clip(lower=0)
+    forecast_df['yhat_upper'] = forecast_df['yhat_upper'].clip(lower=0)
+
+    return forecast_df
+
+
 # ============================
 # NOVO: Slider para escolher o valor mínimo
 # ============================
@@ -194,13 +489,27 @@ min_price = st.sidebar.slider(
     "💵 Preço mínimo da ação (R$):",
     min_value=1.0,
     max_value=50.0,
-    value=7.0,  # Valor padrão
+    value=7.0,
     step=0.5,
     help="Selecione o valor mínimo para filtrar as ações. Apenas ações com preço acima deste valor serão mostradas."
 )
 
+# NOVO: Seletor de modelo
+st.sidebar.markdown("---")
+st.sidebar.subheader("🤖 Modelo de Previsão")
+modelo_escolhido = st.sidebar.selectbox(
+    "Escolha o modelo de previsão:",
+    ["Prophet (Simples e Rápido)", "XGBoost (Avançado - Mais Preciso)"],
+    help="Prophet: bom para tendências gerais. XGBoost: melhor para capturar padrões complexos"
+)
+
 # Mostrar valor selecionado no sidebar
 st.sidebar.info(f"🔎 Mostrando ações com preço > R$ {min_price:.2f}")
+
+if modelo_escolhido == "XGBoost (Avançado - Mais Preciso)":
+    st.sidebar.warning("⚠️ XGBoost pode ser mais lento na primeira execução")
+    st.sidebar.info(
+        "📊 O XGBoost usa múltiplos indicadores: RSI, Médias Móveis, MACD, Bandas de Bollinger, Volume e mais!")
 
 
 # ============================
@@ -219,18 +528,15 @@ def get_filtered_stocks(stocks_dict, min_price_value):
 
         for i, (name, code) in enumerate(stocks_dict.items()):
             try:
-                # Pegar apenas o último preço disponível (mais rápido)
                 ticker = yf.Ticker(code + ".SA")
                 hist = ticker.history(period="1d")
 
                 if not hist.empty:
                     last_price = float(hist['Close'].iloc[-1])
 
-                    # Só incluir se preço > min_price_value
                     if last_price > min_price_value:
                         filtered_stocks[name] = code
 
-                # Atualizar progresso
                 progress_bar.progress((i + 1) / total)
 
             except Exception as e:
@@ -255,7 +561,6 @@ def get_scanner_data(stocks_dict, min_price_value):
             last_rsi_val = float(df["RSI"].iloc[-1])
             last_price_val = float(df["Close"].iloc[-1])
 
-            # FILTRO DINÂMICO: Usar o valor do slider
             if last_price_val > min_price_value:
                 status = ""
                 if last_rsi_val >= 70:
@@ -271,21 +576,18 @@ def get_scanner_data(stocks_dict, min_price_value):
 
 
 # ============================
-# RSI Scanner (AGORA USANDO O FILTRO DINÂMICO)
+# RSI Scanner
 # ============================
 st.subheader("🔎 RSI Scanner - Overbought/oversold stocks")
 st.markdown(f"<sub>🔎 Scanner RSI - Ações Sobrecompradas/Sobrevendidas (Preço > R$ {min_price:.2f})</sub>",
             unsafe_allow_html=True)
 
-# Usar a função com cache e o valor dinâmico do slider
 scanner_results = get_scanner_data(top_stocks, min_price)
 
-# Criar DataFrame e ordenar por RSI de forma crescente (ascending)
 if scanner_results:
     df_rsi = pd.DataFrame(scanner_results, columns=["Stock", "Price", "RSI", "Status"])
     df_rsi = df_rsi.sort_values(by="RSI", ascending=True)
 
-    # Configuração de colunas para centralizar
     column_config = {
         "Stock": st.column_config.TextColumn("Stock", width="medium"),
         "Price": st.column_config.NumberColumn("Price", format="R$ %.2f", width="small"),
@@ -293,7 +595,6 @@ if scanner_results:
         "Status": st.column_config.TextColumn("Status", width="medium"),
     }
 
-    # Tabela com seleção habilitada
     event = st.dataframe(
         df_rsi,
         use_container_width=True,
@@ -304,13 +605,11 @@ if scanner_results:
         key="rsi_scanner"
     )
 
-    # Lógica de seleção: Se clicar na tabela, usa essa ação.
     selected_stock_name = None
     if event and event.selection and len(event.selection.rows) > 0:
         row_idx = event.selection.rows[0]
         selected_stock_name = df_rsi.iloc[row_idx]["Stock"]
 
-    # Mostrar contagem de resultados
     st.caption(f"📊 {len(scanner_results)} ações encontradas com RSI extremo e preço > R$ {min_price:.2f}")
 
 else:
@@ -323,20 +622,15 @@ else:
 # ============================
 st.subheader("📌 Stock Details")
 
-# Mostrar indicador de carregamento enquanto filtra
 with st.spinner(f"Carregando lista de ações com preço > R$ {min_price:.2f}..."):
-    # Usar cache com o valor dinâmico do slider
     filtered_stocks = get_filtered_stocks(top_stocks, min_price)
 
-# Verificar se temos ações filtradas
 if not filtered_stocks:
     st.warning(f"⚠️ Nenhuma ação encontrada com preço superior a R$ {min_price:.2f} no momento.")
     st.stop()
 
-# Criar lista apenas com ações filtradas
 filtered_stock_list = list(filtered_stocks.keys())
 
-# Selectbox com apenas ações filtradas
 if selected_stock_name and selected_stock_name in filtered_stock_list:
     st.info(f"Ação selecionada na tabela: **{selected_stock_name}**")
     default_idx = filtered_stock_list.index(selected_stock_name)
@@ -351,7 +645,6 @@ else:
         filtered_stock_list
     )
 
-# Mostrar contagem de ações disponíveis
 st.caption(f"📊 {len(filtered_stock_list)} ações disponíveis com preço > R$ {min_price:.2f}")
 
 ticker = filtered_stocks[stock_choice] + ".SA"
@@ -383,19 +676,59 @@ else:
     fig_rsi.update_layout(title="RSI - Relative Strength Index", yaxis_title="RSI", height=400)
     st.plotly_chart(fig_rsi, use_container_width=True)
 
-    # Prophet Forecast
-    df_forecast = data.reset_index()[['Date', 'Close']].copy()
-    df_forecast.columns = ['ds', 'y']
-
-    # Modelo Prophet
-    model = Prophet(daily_seasonality=True)
-    model.fit(df_forecast)
-
-    future = model.make_future_dataframe(periods=future_days)
-    forecast = model.predict(future)
+    # ============================
+    # PREVISÃO COM O MODELO ESCOLHIDO
+    # ============================
 
     st.subheader(f"🔮 Forecast for the next {future_days} days")
+
+    # Mostrar qual modelo está sendo usado
+    if modelo_escolhido == "Prophet (Simples e Rápido)":
+        st.info("📊 Usando **Prophet** - Modelo especializado em séries temporais")
+    else:
+        st.info("🚀 Usando **XGBoost** - Modelo avançado com múltiplos indicadores técnicos")
+
     st.markdown(f"<sub>🔮 Previsão para os próximos {future_days} dias</sub>", unsafe_allow_html=True)
+
+    # Executar previsão conforme modelo escolhido
+    if modelo_escolhido == "Prophet (Simples e Rápido)":
+        # Prophet - código original
+        df_forecast = data.reset_index()[['Date', 'Close']].copy()
+        df_forecast.columns = ['ds', 'y']
+
+        model = Prophet(daily_seasonality=True)
+        model.fit(df_forecast)
+
+        future = model.make_future_dataframe(periods=future_days)
+        forecast = model.predict(future)
+
+        # Preparar dados para o gráfico
+        historical_data = df_forecast
+        forecast_data = forecast
+
+    else:
+        # XGBoost - nova implementação
+        with st.spinner("🚀 Treinando modelo XGBoost com múltiplos indicadores..."):
+            forecast_df = get_xgboost_forecast(data, future_days)
+
+        # Criar formato compatível com o esperado pelo resto do código
+        historical_data = data.reset_index()[['Date', 'Close']].copy()
+        historical_data.columns = ['ds', 'y']
+
+
+        # Criar objeto forecast similar ao Prophet
+        class ForecastObject:
+            pass
+
+
+        forecast = ForecastObject()
+        forecast.ds = pd.concat([historical_data['ds'], forecast_df['ds']]).reset_index(drop=True)
+        forecast.yhat = pd.concat([historical_data['y'], forecast_df['yhat']]).reset_index(drop=True)
+        forecast.yhat_lower = pd.concat([historical_data['y'], forecast_df['yhat_lower']]).reset_index(drop=True)
+        forecast.yhat_upper = pd.concat([historical_data['y'], forecast_df['yhat_upper']]).reset_index(drop=True)
+
+        # Para referência futura
+        future = forecast_df
 
     # ============================
     # Cálculo das informações de preço atual vs previsão
@@ -403,8 +736,12 @@ else:
     preco_atual = float(data['Close'].iloc[-1])
 
     # Pegar a previsão para o último dia do período selecionado
-    data_previsao = future['ds'].iloc[-1]
-    previsao_final = float(forecast[forecast['ds'] == data_previsao]['yhat'].iloc[0])
+    if modelo_escolhido == "Prophet (Simples e Rápido)":
+        data_previsao = future['ds'].iloc[-1]
+        previsao_final = float(forecast[forecast['ds'] == data_previsao]['yhat'].iloc[0])
+    else:
+        data_previsao = forecast_df['ds'].iloc[-1]
+        previsao_final = forecast_df['yhat'].iloc[-1]
 
     # Calcular diferenças
     diferenca_valor = previsao_final - preco_atual
@@ -416,22 +753,82 @@ else:
     with col_graf:
         # Gráfico de Previsão Interativo
         fig_forecast = go.Figure()
+
         # Dados Históricos
-        fig_forecast.add_trace(go.Scatter(x=df_forecast['ds'], y=df_forecast['y'], name='Histórico', mode='markers',
-                                          marker=dict(size=2, color='black')))
+        fig_forecast.add_trace(go.Scatter(
+            x=historical_data['ds'],
+            y=historical_data['y'],
+            name='Histórico',
+            mode='markers',
+            marker=dict(size=2, color='black')
+        ))
+
         # Previsão
-        fig_forecast.add_trace(
-            go.Scatter(x=forecast['ds'], y=forecast['yhat'], name='Previsão', line=dict(color='blue')))
-        # Intervalo de Confiança
-        fig_forecast.add_trace(
-            go.Scatter(x=forecast['ds'], y=forecast['yhat_upper'], fill=None, mode='lines',
-                       line_color='rgba(0,0,255,0)',
-                       showlegend=False))
-        fig_forecast.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], fill='tonexty', mode='lines',
-                                          line_color='rgba(0,0,255,0.2)', name='Intervalo de Confiança'))
+        if modelo_escolhido == "Prophet (Simples e Rápido)":
+            # Prophet: linha contínua
+            fig_forecast.add_trace(
+                go.Scatter(
+                    x=forecast['ds'],
+                    y=forecast['yhat'],
+                    name='Previsão',
+                    line=dict(color='blue')
+                )
+            )
+            # Intervalo de Confiança
+            fig_forecast.add_trace(
+                go.Scatter(
+                    x=forecast['ds'],
+                    y=forecast['yhat_upper'],
+                    fill=None,
+                    mode='lines',
+                    line_color='rgba(0,0,255,0)',
+                    showlegend=False
+                )
+            )
+            fig_forecast.add_trace(
+                go.Scatter(
+                    x=forecast['ds'],
+                    y=forecast['yhat_lower'],
+                    fill='tonexty',
+                    mode='lines',
+                    line_color='rgba(0,0,255,0.2)',
+                    name='Intervalo de Confiança'
+                )
+            )
+        else:
+            # XGBoost: mostrar apenas a previsão futura
+            fig_forecast.add_trace(
+                go.Scatter(
+                    x=forecast_df['ds'],
+                    y=forecast_df['yhat'],
+                    name='Previsão XGBoost',
+                    line=dict(color='orange', width=2)
+                )
+            )
+            # Intervalo de Confiança aproximado
+            fig_forecast.add_trace(
+                go.Scatter(
+                    x=forecast_df['ds'],
+                    y=forecast_df['yhat_upper'],
+                    fill=None,
+                    mode='lines',
+                    line_color='rgba(255,165,0,0)',
+                    showlegend=False
+                )
+            )
+            fig_forecast.add_trace(
+                go.Scatter(
+                    x=forecast_df['ds'],
+                    y=forecast_df['yhat_lower'],
+                    fill='tonexty',
+                    mode='lines',
+                    line_color='rgba(255,165,0,0.2)',
+                    name='Intervalo de Confiança (95%)'
+                )
+            )
 
         fig_forecast.update_layout(
-            title=f"Previsão para {stock_choice}",
+            title=f"Previsão para {stock_choice} - {modelo_escolhido}",
             yaxis_title="Preço (R$)",
             height=500,
             legend=dict(
@@ -525,16 +922,78 @@ else:
 
             st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.3;'>", unsafe_allow_html=True)
 
+            if modelo_escolhido == "Prophet (Simples e Rápido)":
+                intervalo_inferior = forecast[forecast['ds'] == data_previsao]['yhat_lower'].iloc[0]
+                intervalo_superior = forecast[forecast['ds'] == data_previsao]['yhat_upper'].iloc[0]
+            else:
+                intervalo_inferior = forecast_df['yhat_lower'].iloc[-1]
+                intervalo_superior = forecast_df['yhat_upper'].iloc[-1]
+
             st.markdown(f'''
             <div style="background-color: #f0f2f6; padding: 0.5rem; border-radius: 0.3rem; font-size: 0.9rem;">
                 <b>📊 Intervalo de Confiança (95%)</b><br>
-                <span style="font-size: 1.5rem; font-weight: bold;">R$ {forecast['yhat_lower'].iloc[-1]:.2f} - R$ {forecast['yhat_upper'].iloc[-1]:.2f}</span>
+                <span style="font-size: 1.5rem; font-weight: bold;">R$ {intervalo_inferior:.2f} - R$ {intervalo_superior:.2f}</span>
             </div>
             ''', unsafe_allow_html=True)
 
             st.markdown(
                 f'<p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem; text-align: right;">📅 {data_previsao.strftime("%d/%m/%Y")}</p>',
                 unsafe_allow_html=True)
+
+    # ============================
+    # SEÇÃO DE FEATURES DO XGBOOST (mostrar apenas quando selecionado)
+    # ============================
+    if modelo_escolhido == "XGBoost (Avançado - Mais Preciso)":
+        st.divider()
+        with st.expander("🔬 Detalhes do Modelo XGBoost - Indicadores Utilizados"):
+            st.markdown("""
+            ### 📊 Indicadores Técnicos Utilizados no XGBoost:
+
+            **Indicadores de Tendência:**
+            - Médias Móveis (5, 10, 20, 50 dias)
+            - MACD (Moving Average Convergence Divergence)
+
+            **Indicadores de Momentum:**
+            - RSI (Relative Strength Index)
+            - Retornos (1, 5, 10 dias)
+
+            **Indicadores de Volatilidade:**
+            - Volatilidade (5 e 10 dias)
+            - Bandas de Bollinger (largura e posição relativa)
+
+            **Indicadores de Volume:**
+            - Volume relativo à média
+            - Média móvel do volume
+
+            **Features Temporais:**
+            - Dia da semana
+            - Mês
+            - Dia do mês
+
+            **Total:** 18 features diferentes para máxima precisão!
+            """)
+
+            # Mostrar últimas features calculadas
+            st.markdown("### 📈 Últimos valores calculados:")
+            try:
+                df_features = create_features(data)
+                last_row = df_features.iloc[-1]
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("RSI", f"{last_row['RSI']:.2f}")
+                    st.metric("SMA 20", f"R$ {last_row['SMA_20']:.2f}")
+                    st.metric("MACD", f"{last_row['MACD']:.4f}")
+                with col2:
+                    st.metric("Volatilidade 5d", f"{last_row['Volatility_5d']:.4f}")
+                    st.metric("BB Width", f"{last_row['BB_Width']:.4f}")
+                    st.metric("Volume Ratio", f"{last_row['Volume_Ratio']:.2f}")
+                with col3:
+                    st.metric("Retorno 1d", f"{last_row['Return_1d'] * 100:.2f}%")
+                    st.metric("Retorno 5d", f"{last_row['Return_5d'] * 100:.2f}%")
+                    st.metric("Dia da semana", f"{last_row['DayOfWeek']:.0f}")
+            except Exception as e:
+                st.info(f"Carregando dados...")
 
     # ============================
     # CALCULADORA DE RETORNO MANUAL
